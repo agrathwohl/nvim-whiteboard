@@ -180,8 +180,6 @@ function M.setup_keymaps()
   end, opts)
   
   -- View controls
-  vim.keymap.set('n', keymaps.zoom_in, function() M.zoom(0.1) end, opts)
-  vim.keymap.set('n', keymaps.zoom_out, function() M.zoom(-0.1) end, opts)
   vim.keymap.set('n', keymaps.toggle_grid, M.toggle_grid, opts)
   
   -- File operations
