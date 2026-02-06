@@ -216,6 +216,33 @@ function M.move_at_cursor(dx, dy)
   end
 end
 
+function M.resize_node(id, dw, dh)
+  local node = M.nodes[id]
+  if not node then return end
+
+  local min_width = 8
+  local min_height = 3
+  local max_width = 60
+  local max_height = 20
+
+  node.width = math.max(min_width, math.min(max_width, node.width + dw))
+  node.height = math.max(min_height, math.min(max_height, node.height + dh))
+
+  require('whiteboard.renderer').render()
+end
+
+function M.resize_at_cursor(dw, dh)
+  local canvas = require('whiteboard.canvas')
+  local pos = canvas.get_cursor_pos()
+  local node = M.get_node_at(pos.x, pos.y)
+
+  if node then
+    M.resize_node(node.id, dw, dh)
+  else
+    vim.notify('No node at cursor position', vim.log.levels.WARN)
+  end
+end
+
 function M.duplicate(id)
   local node = M.nodes[id]
   if not node then return nil end
