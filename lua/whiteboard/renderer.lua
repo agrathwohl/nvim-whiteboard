@@ -220,20 +220,37 @@ end
 function M.draw_char(bufnr, ns, row, col, char)
   if row >= 0 and col >= 0 and row < config.options.canvas.height then
     local current_line = vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false)[1] or ''
+    local current_display_width = vim.fn.strdisplaywidth(current_line)
 
-    -- Ensure line is long enough
-    while #current_line <= col do
-      current_line = current_line .. ' '
+    -- Ensure line is long enough (display width)
+    if current_display_width <= col then
+      current_line = current_line .. string.rep(' ', col - current_display_width + 1)
     end
 
-    -- Replace character at position
-    local new_line
-    if col == 0 then
-      new_line = char .. current_line:sub(2)
-    else
-      new_line = current_line:sub(1, col) .. char .. current_line:sub(col + 2)
+    -- Convert display column to byte positions
+    local byte_start = vim.fn.byteidx(current_line, col)
+    local byte_end = vim.fn.byteidx(current_line, col + 1)
+
+    local prefix = ''
+    local suffix = ''
+
+    if byte_start > 0 then
+      prefix = current_line:sub(1, byte_start)
+    elseif col > 0 then
+      prefix = string.rep(' ', col)
     end
 
+    if byte_end > 0 and byte_end < #current_line then
+      suffix = current_line:sub(byte_end + 1)
+    elseif byte_end == 0 and col + 1 < current_display_width then
+      -- byte_end of 0 means col+1 is beyond string, get rest after col
+      local after_col = vim.fn.byteidx(current_line, col + 1)
+      if after_col > 0 then
+        suffix = current_line:sub(after_col + 1)
+      end
+    end
+
+    local new_line = prefix .. char .. suffix
     vim.api.nvim_buf_set_lines(bufnr, row, row + 1, false, { new_line })
   end
 end
