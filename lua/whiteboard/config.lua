@@ -100,9 +100,13 @@ M.defaults = {
     start_connect = 'c',
     cancel_connect = '<Esc>',
     
+    -- Node resize (> < for width, = - for height)
+    resize_wider = '>',
+    resize_narrower = '<',
+    resize_taller = '=',
+    resize_shorter = '-',
+
     -- Canvas
-    zoom_in = '+',
-    zoom_out = '-',
     toggle_grid = 'g',
     center_view = 'zz',
     
