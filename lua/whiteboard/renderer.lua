@@ -63,54 +63,111 @@ function M.render_connections()
   end
 end
 
+function M.get_edge_connection_point(node, target_x, target_y)
+  -- Calculate center of node
+  local cx = node.x + math.floor(node.width / 2)
+  local cy = node.y + math.floor(node.height / 2)
+
+  -- Determine which edge to connect from based on target direction
+  local dx = target_x - cx
+  local dy = target_y - cy
+
+  local x, y
+
+  if math.abs(dx) > math.abs(dy) then
+    -- Connect from left or right edge
+    if dx > 0 then
+      x = node.x + node.width - 1  -- right edge
+    else
+      x = node.x  -- left edge
+    end
+    y = cy
+  else
+    -- Connect from top or bottom edge
+    if dy > 0 then
+      y = node.y + node.height - 1  -- bottom edge
+    else
+      y = node.y  -- top edge
+    end
+    x = cx
+  end
+
+  return x, y
+end
+
 function M.draw_connection_line(bufnr, ns, from_node, to_node, conn)
   local style = config.options.connections.styles[conn.style] or config.options.connections.styles.solid
-  
-  -- Calculate connection points (center of each node)
-  local x1 = from_node.x + math.floor(from_node.width / 2)
-  local y1 = from_node.y + math.floor(from_node.height / 2)
-  local x2 = to_node.x + math.floor(to_node.width / 2)
-  local y2 = to_node.y + math.floor(to_node.height / 2)
-  
-  -- Simple line drawing (Manhattan routing)
-  local mid_x = math.floor((x1 + x2) / 2)
-  
-  -- Draw horizontal then vertical
-  if math.abs(x2 - x1) > math.abs(y2 - y1) then
-    -- Horizontal segment
-    for x = math.min(x1, x2), math.max(x1, x2) do
+
+  -- Calculate centers for direction
+  local from_cx = from_node.x + math.floor(from_node.width / 2)
+  local from_cy = from_node.y + math.floor(from_node.height / 2)
+  local to_cx = to_node.x + math.floor(to_node.width / 2)
+  local to_cy = to_node.y + math.floor(to_node.height / 2)
+
+  -- Get edge connection points
+  local x1, y1 = M.get_edge_connection_point(from_node, to_cx, to_cy)
+  local x2, y2 = M.get_edge_connection_point(to_node, from_cx, from_cy)
+
+  -- Determine primary direction
+  local dx = x2 - x1
+  local dy = y2 - y1
+
+  if math.abs(dx) > math.abs(dy) then
+    -- Primarily horizontal - draw horizontal then vertical
+    local mid_x = math.floor((x1 + x2) / 2)
+
+    -- First horizontal segment
+    for x = math.min(x1, mid_x), math.max(x1, mid_x) do
       M.draw_char(bufnr, ns, y1, x, style.char)
     end
-    
+
     -- Vertical segment
     for y = math.min(y1, y2), math.max(y1, y2) do
-      M.draw_char(bufnr, ns, y, x2, '│')
+      M.draw_char(bufnr, ns, y, mid_x, '│')
     end
-  else
-    -- Vertical segment
-    for y = math.min(y1, y2), math.max(y1, y2) do
-      M.draw_char(bufnr, ns, y, x1, '│')
-    end
-    
-    -- Horizontal segment
-    for x = math.min(x1, x2), math.max(x1, x2) do
+
+    -- Second horizontal segment
+    for x = math.min(mid_x, x2), math.max(mid_x, x2) do
       M.draw_char(bufnr, ns, y2, x, style.char)
     end
-  end
-  
-  -- Draw arrow at end
-  if x2 > x1 then
-    M.draw_char(bufnr, ns, y2, x2 - 1, style.arrow)
-  elseif x2 < x1 then
-    M.draw_char(bufnr, ns, y2, x2 + 1, '◀')
-  elseif y2 > y1 then
-    M.draw_char(bufnr, ns, y2 - 1, x2, '▼')
   else
-    M.draw_char(bufnr, ns, y2 + 1, x2, '▲')
+    -- Primarily vertical - draw vertical then horizontal
+    local mid_y = math.floor((y1 + y2) / 2)
+
+    -- First vertical segment
+    for y = math.min(y1, mid_y), math.max(y1, mid_y) do
+      M.draw_char(bufnr, ns, y, x1, '│')
+    end
+
+    -- Horizontal segment
+    for x = math.min(x1, x2), math.max(x1, x2) do
+      M.draw_char(bufnr, ns, mid_y, x, style.char)
+    end
+
+    -- Second vertical segment
+    for y = math.min(mid_y, y2), math.max(mid_y, y2) do
+      M.draw_char(bufnr, ns, y, x2, '│')
+    end
   end
-  
+
+  -- Draw arrow at destination edge
+  if math.abs(dx) > math.abs(dy) then
+    if x2 > x1 then
+      M.draw_char(bufnr, ns, y2, x2, '◀')
+    else
+      M.draw_char(bufnr, ns, y2, x2, '▶')
+    end
+  else
+    if y2 > y1 then
+      M.draw_char(bufnr, ns, y2, x2, '▲')
+    else
+      M.draw_char(bufnr, ns, y2, x2, '▼')
+    end
+  end
+
   -- Draw label if exists
   if conn.label and conn.label ~= '' then
+    local mid_x = math.floor((x1 + x2) / 2)
     local mid_y = math.floor((y1 + y2) / 2)
     vim.api.nvim_buf_set_extmark(bufnr, ns, mid_y - 1, mid_x, {
       virt_text = {{conn.label, 'Comment'}},

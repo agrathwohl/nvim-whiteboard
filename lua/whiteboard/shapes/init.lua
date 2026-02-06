@@ -6,28 +6,39 @@ M.network = require('whiteboard.shapes.network')
 M.code = require('whiteboard.shapes.code')
 
 function M.render_box(node)
-  local width = node.width or 10
-  local height = node.height or 3
+  local width = node.width or 16
+  local height = node.height or 5
   local border = utils.get_border_chars(node.style.border or 'single')
-  
+  local inner_width = width - 2
+  local margin = 2  -- horizontal margin inside box
+
   local lines = {}
-  
+
   -- Top border
-  table.insert(lines, border[1] .. string.rep(border[2], width - 2) .. border[3])
-  
-  -- Content lines
-  local text_lines = utils.wrap_text(node.text, width - 2)
+  table.insert(lines, border[1] .. string.rep(border[2], inner_width) .. border[3])
+
+  -- Content lines with vertical centering
+  local text_lines = utils.wrap_text(node.text, inner_width - (margin * 2))
   local content_height = height - 2
-  
+  local text_start = math.floor((content_height - #text_lines) / 2) + 1
+
   for i = 1, content_height do
-    local line_text = text_lines[i] or ''
-    local padded = line_text .. string.rep(' ', width - 2 - vim.fn.strdisplaywidth(line_text))
+    local text_idx = i - text_start + 1
+    local line_text = ''
+    if text_idx >= 1 and text_idx <= #text_lines then
+      line_text = text_lines[text_idx]
+    end
+    -- Center text horizontally with margin
+    local text_width = vim.fn.strdisplaywidth(line_text)
+    local left_pad = math.floor((inner_width - text_width) / 2)
+    local right_pad = inner_width - text_width - left_pad
+    local padded = string.rep(' ', left_pad) .. line_text .. string.rep(' ', right_pad)
     table.insert(lines, border[4] .. padded .. border[4])
   end
-  
+
   -- Bottom border
-  table.insert(lines, border[6] .. string.rep(border[2], width - 2) .. border[5])
-  
+  table.insert(lines, border[6] .. string.rep(border[2], inner_width) .. border[5])
+
   return lines
 end
 
@@ -106,26 +117,26 @@ end
 
 function M.get_dimensions(shape_type)
   local dimensions = {
-    box = { width = 10, height = 3 },
-    database = { width = 12, height = 4 },
-    cloud = { width = 18, height = 6 },
-    server = { width = 12, height = 5 },
-    client = { width = 10, height = 3 },
-    api = { width = 10, height = 3 },
-    service = { width = 12, height = 3 },
-    queue = { width = 10, height = 3 },
-    cache = { width = 10, height = 3 },
-    component = { width = 10, height = 3 },
-    class = { width = 12, height = 4 },
-    function_ = { width = 12, height = 3 },
-    module = { width = 10, height = 3 },
-    package = { width = 10, height = 3 },
-    router = { width = 10, height = 3 },
-    firewall = { width = 12, height = 3 },
-    switch = { width = 10, height = 3 },
-    load_balancer = { width = 14, height = 3 },
+    box = { width = 24, height = 7 },
+    database = { width = 26, height = 9 },
+    cloud = { width = 30, height = 10 },
+    server = { width = 26, height = 9 },
+    client = { width = 24, height = 7 },
+    api = { width = 24, height = 7 },
+    service = { width = 26, height = 7 },
+    queue = { width = 24, height = 7 },
+    cache = { width = 24, height = 7 },
+    component = { width = 24, height = 7 },
+    class = { width = 26, height = 9 },
+    function_ = { width = 26, height = 7 },
+    module = { width = 24, height = 7 },
+    package = { width = 24, height = 7 },
+    router = { width = 24, height = 7 },
+    firewall = { width = 26, height = 7 },
+    switch = { width = 24, height = 7 },
+    load_balancer = { width = 28, height = 7 },
   }
-  
+
   return dimensions[shape_type] or dimensions.box
 end
 

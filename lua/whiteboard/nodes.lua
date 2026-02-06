@@ -6,6 +6,25 @@ M.nodes = {}
 M.next_id = 1
 M.selected_id = nil
 
+function M.calculate_dimensions(text, shape, min_dims)
+  local h_padding = 12  -- 6 chars each side for border + margin
+  local v_padding = 6   -- 3 lines each side for border + margin
+  local lines = vim.split(text, '\n')
+  local max_line_width = 0
+
+  for _, line in ipairs(lines) do
+    local w = vim.fn.strdisplaywidth(line)
+    if w > max_line_width then
+      max_line_width = w
+    end
+  end
+
+  local width = math.max(min_dims.width, max_line_width + h_padding)
+  local height = math.max(min_dims.height, #lines + v_padding)
+
+  return { width = width, height = height }
+end
+
 function M.add(node)
   node.id = node.id or M.next_id
   M.next_id = math.max(M.next_id, node.id + 1)
@@ -15,9 +34,12 @@ function M.add(node)
   node.shape = node.shape or 'box'
   node.text = node.text or ''
 
-  -- Get shape-specific dimensions
+  -- Get shape-specific minimum dimensions
   local shapes = require('whiteboard.shapes')
-  local dims = shapes.get_dimensions(node.shape)
+  local min_dims = shapes.get_dimensions(node.shape)
+
+  -- Calculate actual dimensions based on text
+  local dims = M.calculate_dimensions(node.text, node.shape, min_dims)
   node.width = node.width or dims.width
   node.height = node.height or dims.height
 
@@ -145,6 +167,14 @@ function M.edit_node(id)
   local function save_and_close()
     local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
     node.text = table.concat(lines, '\n'):gsub('^%s+', ''):gsub('%s+$', '')
+
+    -- Recalculate dimensions to fit new text
+    local shapes = require('whiteboard.shapes')
+    local min_dims = shapes.get_dimensions(node.shape)
+    local dims = M.calculate_dimensions(node.text, node.shape, min_dims)
+    node.width = dims.width
+    node.height = dims.height
+
     vim.api.nvim_win_close(win, true)
     require('whiteboard.renderer').render()
   end
