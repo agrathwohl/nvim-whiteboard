@@ -160,6 +160,20 @@ function M.setup_keymaps()
     require('whiteboard.nodes').move_at_cursor(1, 0)
   end, opts)
 
+  -- Node resizing: > < for width, + - for height
+  vim.keymap.set('n', '>', function()
+    require('whiteboard.nodes').resize_at_cursor(2, 0)
+  end, opts)
+  vim.keymap.set('n', '<', function()
+    require('whiteboard.nodes').resize_at_cursor(-2, 0)
+  end, opts)
+  vim.keymap.set('n', '=', function()
+    require('whiteboard.nodes').resize_at_cursor(0, 1)
+  end, opts)
+  vim.keymap.set('n', '-', function()
+    require('whiteboard.nodes').resize_at_cursor(0, -1)
+  end, opts)
+
   -- Connection mode
   vim.keymap.set('n', keymaps.start_connect, function()
     require('whiteboard.connections').start_connection()
