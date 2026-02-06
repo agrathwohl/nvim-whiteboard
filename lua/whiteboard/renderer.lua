@@ -32,8 +32,10 @@ function M.render()
 
   vim.api.nvim_buf_set_option(bufnr, 'modifiable', false)
 
-  -- Render connections on top (using extmarks)
+  -- Render connections on top
+  vim.api.nvim_buf_set_option(bufnr, 'modifiable', true)
   M.render_connections()
+  vim.api.nvim_buf_set_option(bufnr, 'modifiable', false)
 
   -- Highlight selected node
   if nodes.selected_id then
@@ -46,27 +48,42 @@ function M.render_node(node)
   local shape_lines = shapes.render(node)
 
   for i, line in ipairs(shape_lines) do
-    local row = node.y + i - 2  -- 0-indexed (node.y is 1-indexed, i is 1-indexed)
+    local row = node.y + i - 2  -- 0-indexed
     if row >= 0 and row < config.options.canvas.height then
-      local col = node.x - 1  -- 0-indexed
+      local col = node.x - 1  -- 0-indexed display column
 
       -- Get current line content
       local current_line = vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false)[1] or ''
 
-      -- Ensure line is long enough
-      local current_len = #current_line
-      if current_len < col + #line then
-        current_line = current_line .. string.rep(' ', col + #line - current_len)
+      -- Get display widths
+      local line_display_width = vim.fn.strdisplaywidth(line)
+      local current_display_width = vim.fn.strdisplaywidth(current_line)
+
+      -- Ensure current line has enough display width
+      if current_display_width < col + line_display_width then
+        current_line = current_line .. string.rep(' ', col + line_display_width - current_display_width)
       end
 
-      -- Simple byte-based replacement (works for ASCII canvas)
-      local new_line
-      if col == 0 then
-        new_line = line .. current_line:sub(#line + 1)
-      else
-        new_line = current_line:sub(1, col) .. line .. current_line:sub(col + #line + 1)
+      -- Convert display column to byte position
+      local prefix = ''
+      local suffix = ''
+
+      if col > 0 then
+        local byte_start = vim.fn.byteidx(current_line, col)
+        if byte_start > 0 then
+          prefix = current_line:sub(1, byte_start)
+        else
+          prefix = string.rep(' ', col)
+        end
       end
 
+      local end_col = col + line_display_width
+      local byte_end = vim.fn.byteidx(current_line, end_col)
+      if byte_end > 0 and byte_end < #current_line then
+        suffix = current_line:sub(byte_end + 1)
+      end
+
+      local new_line = prefix .. line .. suffix
       vim.api.nvim_buf_set_lines(bufnr, row, row + 1, false, { new_line })
     end
   end
@@ -202,7 +219,6 @@ end
 
 function M.draw_char(bufnr, ns, row, col, char)
   if row >= 0 and col >= 0 and row < config.options.canvas.height then
-    vim.api.nvim_buf_set_option(bufnr, 'modifiable', true)
     local current_line = vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false)[1] or ''
 
     -- Ensure line is long enough
@@ -219,7 +235,6 @@ function M.draw_char(bufnr, ns, row, col, char)
     end
 
     vim.api.nvim_buf_set_lines(bufnr, row, row + 1, false, { new_line })
-    vim.api.nvim_buf_set_option(bufnr, 'modifiable', false)
   end
 end
 
