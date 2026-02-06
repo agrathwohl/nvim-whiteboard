@@ -178,6 +178,11 @@ function M.setup_keymaps()
   vim.keymap.set('n', keymaps.start_connect, function()
     require('whiteboard.connections').start_connection()
   end, opts)
+
+  -- Label connection (press 'l' on a connection line)
+  vim.keymap.set('n', 'l', function()
+    require('whiteboard.connections').edit_label_at_cursor()
+  end, opts)
   
   -- View controls
   vim.keymap.set('n', keymaps.toggle_grid, M.toggle_grid, opts)

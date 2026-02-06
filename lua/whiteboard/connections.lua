@@ -127,6 +127,101 @@ function M.get_by_id(id)
   return M.connections[id]
 end
 
+function M.get_edge_point(node, target_x, target_y)
+  local cx = node.x + math.floor(node.width / 2)
+  local cy = node.y + math.floor(node.height / 2)
+  local dx = target_x - cx
+  local dy = target_y - cy
+
+  if math.abs(dx) > math.abs(dy) then
+    if dx > 0 then
+      return node.x + node.width - 1, cy
+    else
+      return node.x, cy
+    end
+  else
+    if dy > 0 then
+      return cx, node.y + node.height - 1
+    else
+      return cx, node.y
+    end
+  end
+end
+
+function M.get_connection_at(x, y)
+  local nodes_mod = require('whiteboard.nodes')
+
+  for _, conn in pairs(M.connections) do
+    local from_node = nodes_mod.get_by_id(conn.from)
+    local to_node = nodes_mod.get_by_id(conn.to)
+
+    if from_node and to_node then
+      -- Use same edge-to-edge logic as renderer
+      local from_cx = from_node.x + math.floor(from_node.width / 2)
+      local from_cy = from_node.y + math.floor(from_node.height / 2)
+      local to_cx = to_node.x + math.floor(to_node.width / 2)
+      local to_cy = to_node.y + math.floor(to_node.height / 2)
+
+      local x1, y1 = M.get_edge_point(from_node, to_cx, to_cy)
+      local x2, y2 = M.get_edge_point(to_node, from_cx, from_cy)
+
+      local dx = x2 - x1
+      local dy = y2 - y1
+
+      if math.abs(dx) > math.abs(dy) then
+        local mid_x = math.floor((x1 + x2) / 2)
+        -- First horizontal segment
+        if y == y1 and x >= math.min(x1, mid_x) and x <= math.max(x1, mid_x) then
+          return conn
+        end
+        -- Vertical segment
+        if x == mid_x and y >= math.min(y1, y2) and y <= math.max(y1, y2) then
+          return conn
+        end
+        -- Second horizontal segment
+        if y == y2 and x >= math.min(mid_x, x2) and x <= math.max(mid_x, x2) then
+          return conn
+        end
+      else
+        local mid_y = math.floor((y1 + y2) / 2)
+        -- First vertical segment
+        if x == x1 and y >= math.min(y1, mid_y) and y <= math.max(y1, mid_y) then
+          return conn
+        end
+        -- Horizontal segment
+        if y == mid_y and x >= math.min(x1, x2) and x <= math.max(x1, x2) then
+          return conn
+        end
+        -- Second vertical segment
+        if x == x2 and y >= math.min(mid_y, y2) and y <= math.max(mid_y, y2) then
+          return conn
+        end
+      end
+    end
+  end
+  return nil
+end
+
+function M.edit_label_at_cursor()
+  local canvas = require('whiteboard.canvas')
+  local pos = canvas.get_cursor_pos()
+  local conn = M.get_connection_at(pos.x, pos.y)
+
+  if not conn then
+    vim.notify('No connection at cursor position', vim.log.levels.WARN)
+    return
+  end
+
+  -- Create input for label
+  local current_label = conn.label or ''
+  vim.ui.input({ prompt = 'Connection label: ', default = current_label }, function(input)
+    if input ~= nil then
+      conn.label = input
+      require('whiteboard.renderer').render()
+    end
+  end)
+end
+
 function M.get_for_node(node_id)
   local result = { from = {}, to = {} }
   for _, conn in pairs(M.connections) do
