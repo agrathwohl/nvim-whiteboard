@@ -21,12 +21,12 @@ Add to your flake.nix:
 ```nix
 {
   inputs.nvim-whiteboard.url = "path:~/flakes/dctec/nvim-whiteboard";
-  
+
   outputs = { self, nixpkgs, nixvim, nvim-whiteboard }: {
     # In your nixvim configuration
     programs.nixvim = {
       imports = [ nvim-whiteboard.nixvimModules.default ];
-      
+
       plugins.whiteboard = {
         enable = true;
         settings = {
@@ -42,7 +42,7 @@ Add to your flake.nix:
 
 ```lua
 use {
-  'yourusername/nvim-whiteboard',
+  'agrathwohl/nvim-whiteboard',
   config = function()
     require('whiteboard').setup()
   end
@@ -53,7 +53,7 @@ use {
 
 ```lua
 {
-  'yourusername/nvim-whiteboard',
+  'agrathwohl/nvim-whiteboard',
   config = function()
     require('whiteboard').setup()
   end
@@ -71,17 +71,17 @@ use {
 
 ### Default Keymaps
 
-| Key | Action |
-|-----|--------|
-| `<CR>` | Add node at cursor |
+| Key     | Action                |
+| ------- | --------------------- |
+| `<CR>`  | Add node at cursor    |
 | `<Del>` | Delete node at cursor |
-| `<C-e>` | Edit node text |
-| `c` | Start connection mode |
-| `<Esc>` | Cancel connection |
-| `+`/`-` | Zoom in/out |
-| `g` | Toggle grid |
-| `<C-s>` | Save |
-| `<C-q>` | Close |
+| `<C-e>` | Edit node text        |
+| `c`     | Start connection mode |
+| `<Esc>` | Cancel connection     |
+| `+`/`-` | Zoom in/out           |
+| `g`     | Toggle grid           |
+| `<C-s>` | Save                  |
+| `<C-q>` | Close                 |
 
 ### Available Shapes
 
