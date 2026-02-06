@@ -60,11 +60,8 @@ function M.clear_connection_keymaps(bufnr)
   M.connection_keymaps_set = false
   pcall(vim.keymap.del, 'n', '<CR>', { buffer = bufnr })
   pcall(vim.keymap.del, 'n', config.options.keymaps.cancel_connect, { buffer = bufnr })
-  -- Re-establish only the add_node keymap (not all keymaps)
-  local opts = { buffer = bufnr, silent = true }
-  vim.keymap.set('n', config.options.keymaps.add_node, function()
-    require('whiteboard.nodes').add_at_cursor(true)
-  end, opts)
+  -- Re-establish all navigation keymaps
+  require('whiteboard.canvas').setup_keymaps()
 end
 
 function M.complete_connection()
@@ -87,14 +84,7 @@ function M.complete_connection()
     return
   end
   
-  -- Check for duplicate connection
-  for _, conn in pairs(M.connections) do
-    if conn.from == M.connecting.from_id and conn.to == node.id then
-      vim.notify('Connection already exists', vim.log.levels.WARN)
-      M.cancel_connection()
-      return
-    end
-  end
+
   
   M.add(M.connecting.from_id, node.id)
   M.connecting = nil
@@ -202,6 +192,20 @@ function M.get_connection_at(x, y)
     end
   end
   return nil
+end
+
+function M.delete_connection_at_cursor()
+  local canvas = require('whiteboard.canvas')
+  local pos = canvas.get_cursor_pos()
+  local conn = M.get_connection_at(pos.x, pos.y)
+
+  if not conn then
+    vim.notify('No connection at cursor position', vim.log.levels.WARN)
+    return
+  end
+
+  M.delete(conn.id)
+  vim.notify('Connection deleted', vim.log.levels.INFO)
 end
 
 function M.edit_label_at_cursor()

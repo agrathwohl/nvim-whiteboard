@@ -80,22 +80,30 @@ end
 
 function M.draw_grid()
   if not M.state.grid_ns then return end
-  
+
   local grid_size = config.options.canvas.grid_size
   local height = config.options.canvas.height
   local width = config.options.canvas.width
-  
+
   vim.api.nvim_buf_clear_namespace(M.state.bufnr, M.state.grid_ns, 0, -1)
-  
+
   -- Draw horizontal grid lines
   for row = 0, height - 1, grid_size do
     for col = 0, width - 1 do
-      if col % grid_size == 0 then
-        vim.api.nvim_buf_set_extmark(M.state.bufnr, M.state.grid_ns, row, col, {
-          virt_text = {{'·', 'Comment'}},
-          virt_text_pos = 'overlay',
-        })
-      end
+      vim.api.nvim_buf_set_extmark(M.state.bufnr, M.state.grid_ns, row, col, {
+        virt_text = {{'·', 'Comment'}},
+        virt_text_pos = 'overlay',
+      })
+    end
+  end
+
+  -- Draw vertical grid lines
+  for col = 0, width - 1, grid_size do
+    for row = 0, height - 1 do
+      vim.api.nvim_buf_set_extmark(M.state.bufnr, M.state.grid_ns, row, col, {
+        virt_text = {{'·', 'Comment'}},
+        virt_text_pos = 'overlay',
+      })
     end
   end
 end
@@ -131,6 +139,10 @@ function M.setup_keymaps()
   
   vim.keymap.set('n', keymaps.delete_node, function()
     require('whiteboard.nodes').delete_at_cursor()
+  end, opts)
+
+  vim.keymap.set('n', 'D', function()
+    require('whiteboard.connections').delete_connection_at_cursor()
   end, opts)
   
   vim.keymap.set('n', keymaps.edit_text, function()
@@ -183,8 +195,8 @@ function M.setup_keymaps()
     require('whiteboard.connections').start_connection()
   end, opts)
 
-  -- Label connection or node (press 'L' on a connection line or node)
-  vim.keymap.set('n', 'L', function()
+  -- Label connection or node (press 'E' on a connection line or node)
+  vim.keymap.set('n', 'E', function()
     local connections = require('whiteboard.connections')
     local nodes = require('whiteboard.nodes')
     local pos = M.get_cursor_pos()
@@ -208,7 +220,18 @@ function M.setup_keymaps()
   
   -- View controls
   vim.keymap.set('n', keymaps.toggle_grid, M.toggle_grid, opts)
+
+  -- Zoom controls
+  vim.keymap.set('n', '+', function() M.zoom(0.1) end, opts)
+  vim.keymap.set('n', '-', function() M.zoom(-0.1) end, opts)
+  vim.keymap.set('n', '=', function() M.zoom(0.1) end, opts)
+  vim.keymap.set('n', '_', function() M.zoom(-0.1) end, opts)
   
+  -- Duplicate node
+  vim.keymap.set('n', '<C-d>', function()
+    require('whiteboard.nodes').duplicate_at_cursor()
+  end, opts)
+
   -- File operations
   vim.keymap.set('n', keymaps.save, function()
     require('whiteboard').save()

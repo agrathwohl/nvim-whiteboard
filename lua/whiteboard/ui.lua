@@ -14,6 +14,9 @@ M.buffers = {
   selector = nil,
 }
 
+M.selected_shape = 'box'
+M.sidebar_shapes = {}
+
 function M.show_toolbar()
   if not config.options.ui.toolbar.enabled then return end
   
@@ -122,9 +125,6 @@ function M.show_sidebar()
     end
   end, opts)
 end
-
-M.selected_shape = 'box'
-M.sidebar_shapes = {}
 
 function M.show_shape_selector(callback)
   local canvas = require('whiteboard.canvas')

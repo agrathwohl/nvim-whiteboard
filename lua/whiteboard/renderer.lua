@@ -25,16 +25,14 @@ function M.render()
   end
   vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, empty_lines)
 
-  -- Render nodes first (write to buffer)
+  -- Render connections first (so nodes appear on top)
+  M.render_connections()
+
+  -- Render nodes on top of connections
   for id, node in pairs(nodes.nodes) do
     M.render_node(node)
   end
 
-  vim.api.nvim_buf_set_option(bufnr, 'modifiable', false)
-
-  -- Render connections on top
-  vim.api.nvim_buf_set_option(bufnr, 'modifiable', true)
-  M.render_connections()
   vim.api.nvim_buf_set_option(bufnr, 'modifiable', false)
 
   -- Highlight selected node
@@ -94,7 +92,7 @@ function M.render_node(node)
     local label_row = node.y - 2  -- One line above the node (0-indexed)
     if label_row >= 0 then
       local label_col = node.x + math.floor(node.width / 2) - math.floor(vim.fn.strdisplaywidth(node.label) / 2)
-      vim.api.nvim_buf_set_extmark(bufnr, ns, label_row - 1, label_col - 1, {
+      vim.api.nvim_buf_set_extmark(bufnr, ns, label_row, label_col - 1, {
         virt_text = {{node.label, 'Comment'}},
         virt_text_pos = 'overlay',
       })
@@ -271,12 +269,12 @@ end
 function M.highlight_node(node_id)
   local node = nodes.get_by_id(node_id)
   if not node then return end
-  
+
   local bufnr = canvas.get_bufnr()
   local ns = canvas.get_namespace()
-  
-  -- Add visual highlight
-  vim.api.nvim_buf_set_extmark(bufnr, ns, node.y - 2, node.x - 1, {
+
+  -- Add visual highlight on the node's top-left corner
+  vim.api.nvim_buf_set_extmark(bufnr, ns, node.y - 1, node.x - 1, {
     virt_text = {{'▶', 'Visual'}},
     virt_text_pos = 'overlay',
   })
