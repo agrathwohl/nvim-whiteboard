@@ -9,22 +9,32 @@ local config = require('whiteboard.config')
 function M.render()
   local bufnr = canvas.get_bufnr()
   local ns = canvas.get_namespace()
-  
+
   if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
     return
   end
-  
+
   -- Clear existing extmarks
   vim.api.nvim_buf_clear_namespace(bufnr, ns, 0, -1)
-  
-  -- Render connections first (so they appear behind nodes)
-  M.render_connections()
-  
-  -- Render nodes
+
+  -- Clear buffer and reset to empty canvas
+  vim.api.nvim_buf_set_option(bufnr, 'modifiable', true)
+  local empty_lines = {}
+  for i = 1, config.options.canvas.height do
+    table.insert(empty_lines, string.rep(' ', config.options.canvas.width))
+  end
+  vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, empty_lines)
+
+  -- Render nodes first (write to buffer)
   for id, node in pairs(nodes.nodes) do
     M.render_node(node)
   end
-  
+
+  vim.api.nvim_buf_set_option(bufnr, 'modifiable', false)
+
+  -- Render connections on top (using extmarks)
+  M.render_connections()
+
   -- Highlight selected node
   if nodes.selected_id then
     M.highlight_node(nodes.selected_id)
@@ -33,17 +43,31 @@ end
 
 function M.render_node(node)
   local bufnr = canvas.get_bufnr()
-  local ns = canvas.get_namespace()
-  
   local shape_lines = shapes.render(node)
-  
+
   for i, line in ipairs(shape_lines) do
-    local row = node.y + i - 2
-    if row >= 0 then
-      vim.api.nvim_buf_set_extmark(bufnr, ns, row, node.x - 1, {
-        virt_text = {{line, 'Normal'}},
-        virt_text_pos = 'overlay',
-      })
+    local row = node.y + i - 2  -- 0-indexed (node.y is 1-indexed, i is 1-indexed)
+    if row >= 0 and row < config.options.canvas.height then
+      local col = node.x - 1  -- 0-indexed
+
+      -- Get current line content
+      local current_line = vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false)[1] or ''
+
+      -- Ensure line is long enough
+      local current_len = #current_line
+      if current_len < col + #line then
+        current_line = current_line .. string.rep(' ', col + #line - current_len)
+      end
+
+      -- Simple byte-based replacement (works for ASCII canvas)
+      local new_line
+      if col == 0 then
+        new_line = line .. current_line:sub(#line + 1)
+      else
+        new_line = current_line:sub(1, col) .. line .. current_line:sub(col + #line + 1)
+      end
+
+      vim.api.nvim_buf_set_lines(bufnr, row, row + 1, false, { new_line })
     end
   end
 end
@@ -150,18 +174,18 @@ function M.draw_connection_line(bufnr, ns, from_node, to_node, conn)
     end
   end
 
-  -- Draw arrow at destination edge
+  -- Draw arrow pointing TOWARD destination (second object)
   if math.abs(dx) > math.abs(dy) then
     if x2 > x1 then
-      M.draw_char(bufnr, ns, y2, x2, '◀')
+      M.draw_char(bufnr, ns, y2, x2, '▶')  -- pointing right toward dest
     else
-      M.draw_char(bufnr, ns, y2, x2, '▶')
+      M.draw_char(bufnr, ns, y2, x2, '◀')  -- pointing left toward dest
     end
   else
     if y2 > y1 then
-      M.draw_char(bufnr, ns, y2, x2, '▲')
+      M.draw_char(bufnr, ns, y2, x2, '▼')  -- pointing down toward dest
     else
-      M.draw_char(bufnr, ns, y2, x2, '▼')
+      M.draw_char(bufnr, ns, y2, x2, '▲')  -- pointing up toward dest
     end
   end
 

@@ -55,67 +55,120 @@ function M.render_box(node)
 end
 
 function M.render_database(node)
-  local width = node.width or 12
-  local height = node.height or 4
-  
-  local lines = {}
-  
-  -- Database top (ellipse-like)
-  table.insert(lines, '  ' .. string.rep('_', width - 4) .. '  ')
-  table.insert(lines, ' /' .. string.rep(' ', width - 4) .. '\\ ')
-  
-  -- Content
-  local text_lines = utils.wrap_text(node.text, width - 4)
-  local content_height = height - 3
-  
-  for i = 1, content_height do
-    local line_text = text_lines[i] or ''
-    local padded = '│ ' .. line_text .. string.rep(' ', width - 4 - vim.fn.strdisplaywidth(line_text)) .. ' │'
-    table.insert(lines, padded)
+  local width = node.width or 26
+  local height = node.height or 9
+  local inner_width = width - 4
+
+  local display_text = node.text
+  if display_text == nil or display_text == '' then
+    display_text = 'Database'
   end
-  
-  -- Bottom
-  table.insert(lines, ' \\' .. string.rep('_', width - 4) .. '/ ')
-  
+
+  local lines = {}
+
+  -- Database top cylinder cap
+  table.insert(lines, '  ' .. string.rep('_', inner_width) .. '  ')
+  table.insert(lines, ' /' .. string.rep(' ', inner_width) .. '\\ ')
+  table.insert(lines, '|' .. string.rep(' ', inner_width + 2) .. '|')
+
+  -- Content area with centered text
+  local text_lines = utils.wrap_text(display_text, inner_width - 2)
+  if #text_lines == 0 then text_lines = { display_text } end
+  local content_height = height - 5
+  local text_start = math.floor((content_height - #text_lines) / 2)
+
+  for i = 0, content_height - 1 do
+    local text_idx = i - text_start + 1
+    local line_text = ''
+    if text_idx >= 1 and text_idx <= #text_lines then
+      line_text = text_lines[text_idx]
+    end
+    local tw = vim.fn.strdisplaywidth(line_text)
+    local left_pad = math.floor((inner_width - tw) / 2) + 1
+    local right_pad = inner_width - tw - left_pad + 3
+    table.insert(lines, '|' .. string.rep(' ', left_pad) .. line_text .. string.rep(' ', right_pad) .. '|')
+  end
+
+  -- Database bottom cylinder cap
+  table.insert(lines, '|' .. string.rep('_', inner_width + 2) .. '|')
+  table.insert(lines, ' \\' .. string.rep('_', inner_width) .. '/ ')
+
   return lines
 end
 
 function M.render_cloud(node)
-  local width = node.width or 12
-  local text = node.text
-  
-  local lines = {
-    '    .-~~~-.       ',
-    '  ."  o    \".     ',
-    ' /          \\    ',
-    '│   ' .. utils.center_text(text, 10) .. '  │',
-    ' \\          /    ',
-    '   "-.___.-"      ',
-  }
-  
-  return lines
+  local width = node.width or 30
+  local height = node.height or 10
+
+  local display_text = node.text
+  if display_text == nil or display_text == '' then
+    display_text = 'Cloud'
+  end
+
+  -- Use box rendering for cloud - proper cloud shape is complex
+  node.text = display_text
+  return M.render_box(node)
 end
 
 function M.render_server(node)
-  local width = node.width or 10
-  local height = node.height or 5
-  local text = node.text
-  
-  local lines = {
-    '┌' .. string.rep('─', width - 2) .. '┐',
-    '│ SERVER   │',
-    '│' .. string.rep(' ', width - 2) .. '│',
-    '│ ' .. text:sub(1, width - 4) .. string.rep(' ', width - 4 - #text) .. ' │',
-    '│' .. string.rep(' ', width - 2) .. '│',
-    '└' .. string.rep('─', width - 2) .. '┘',
-  }
-  
+  local width = node.width or 26
+  local height = node.height or 9
+  local inner_width = width - 2
+
+  local display_text = node.text
+  if display_text == nil or display_text == '' then
+    display_text = 'Server'
+  end
+
+  local lines = {}
+
+  -- Top border
+  table.insert(lines, '┌' .. string.rep('─', inner_width) .. '┐')
+
+  -- Server header
+  local header = '[ SERVER ]'
+  local hw = vim.fn.strdisplaywidth(header)
+  local hlp = math.floor((inner_width - hw) / 2)
+  local hrp = inner_width - hw - hlp
+  table.insert(lines, '│' .. string.rep(' ', hlp) .. header .. string.rep(' ', hrp) .. '│')
+  table.insert(lines, '│' .. string.rep('─', inner_width) .. '│')
+
+  -- Content area with centered text
+  local text_lines = utils.wrap_text(display_text, inner_width - 4)
+  if #text_lines == 0 then text_lines = { display_text } end
+  local content_height = height - 4
+  local text_start = math.floor((content_height - #text_lines) / 2)
+
+  for i = 0, content_height - 1 do
+    local text_idx = i - text_start + 1
+    local line_text = ''
+    if text_idx >= 1 and text_idx <= #text_lines then
+      line_text = text_lines[text_idx]
+    end
+    local tw = vim.fn.strdisplaywidth(line_text)
+    local left_pad = math.floor((inner_width - tw) / 2)
+    local right_pad = inner_width - tw - left_pad
+    table.insert(lines, '│' .. string.rep(' ', left_pad) .. line_text .. string.rep(' ', right_pad) .. '│')
+  end
+
+  -- Bottom border
+  table.insert(lines, '└' .. string.rep('─', inner_width) .. '┘')
+
   return lines
 end
 
 function M.render(node)
-  -- All shapes use box rendering for now - specialized shapes can be added later
-  return M.render_box(node)
+  local shape_type = node.shape or 'box'
+
+  if shape_type == 'database' then
+    return M.render_database(node)
+  elseif shape_type == 'cloud' then
+    return M.render_cloud(node)
+  elseif shape_type == 'server' then
+    return M.render_server(node)
+  else
+    return M.render_box(node)
+  end
 end
 
 function M.get_dimensions(shape_type)
