@@ -60,9 +60,11 @@ function M.clear_connection_keymaps(bufnr)
   M.connection_keymaps_set = false
   pcall(vim.keymap.del, 'n', '<CR>', { buffer = bufnr })
   pcall(vim.keymap.del, 'n', config.options.keymaps.cancel_connect, { buffer = bufnr })
-  -- Re-establish the original add_node keymap
-  local canvas = require('whiteboard.canvas')
-  canvas.setup_keymaps()
+  -- Re-establish only the add_node keymap (not all keymaps)
+  local opts = { buffer = bufnr, silent = true }
+  vim.keymap.set('n', config.options.keymaps.add_node, function()
+    require('whiteboard.nodes').add_at_cursor(true)
+  end, opts)
 end
 
 function M.complete_connection()

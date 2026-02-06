@@ -129,6 +129,26 @@ function M.edit_at_cursor()
   end
 end
 
+function M.edit_label_at_cursor()
+  local canvas = require('whiteboard.canvas')
+  local pos = canvas.get_cursor_pos()
+  local node = M.get_node_at(pos.x, pos.y)
+  
+  if not node then
+    vim.notify('No node at cursor position', vim.log.levels.WARN)
+    return
+  end
+
+  -- Create input for label
+  local current_label = node.label or ''
+  vim.ui.input({ prompt = 'Node label: ', default = current_label }, function(input)
+    if input ~= nil then
+      node.label = input
+      require('whiteboard.renderer').render()
+    end
+  end)
+end
+
 function M.edit_node(id)
   local node = M.nodes[id]
   if not node then return end

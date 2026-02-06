@@ -104,11 +104,15 @@ function M.setup_keymaps()
   local keymaps = config.options.keymaps
   local opts = { buffer = M.state.bufnr, silent = true }
   
-  -- Navigation
+  -- Navigation (arrow keys and hjkl)
   vim.keymap.set('n', keymaps.move_up, function() M.move_cursor(0, -1) end, opts)
   vim.keymap.set('n', keymaps.move_down, function() M.move_cursor(0, 1) end, opts)
   vim.keymap.set('n', keymaps.move_left, function() M.move_cursor(-1, 0) end, opts)
   vim.keymap.set('n', keymaps.move_right, function() M.move_cursor(1, 0) end, opts)
+  vim.keymap.set('n', 'k', function() M.move_cursor(0, -1) end, opts)
+  vim.keymap.set('n', 'j', function() M.move_cursor(0, 1) end, opts)
+  vim.keymap.set('n', 'h', function() M.move_cursor(-1, 0) end, opts)
+  vim.keymap.set('n', 'l', function() M.move_cursor(1, 0) end, opts)
   
   -- Fast movement with Ctrl
   vim.keymap.set('n', '<C-Up>', function() M.move_cursor(0, -5) end, opts)
@@ -179,9 +183,27 @@ function M.setup_keymaps()
     require('whiteboard.connections').start_connection()
   end, opts)
 
-  -- Label connection (press 'l' on a connection line)
-  vim.keymap.set('n', 'l', function()
-    require('whiteboard.connections').edit_label_at_cursor()
+  -- Label connection or node (press 'L' on a connection line or node)
+  vim.keymap.set('n', 'L', function()
+    local connections = require('whiteboard.connections')
+    local nodes = require('whiteboard.nodes')
+    local pos = M.get_cursor_pos()
+    
+    -- Check for connection first
+    local conn = connections.get_connection_at(pos.x, pos.y)
+    if conn then
+      connections.edit_label_at_cursor()
+      return
+    end
+    
+    -- Check for node
+    local node = nodes.get_node_at(pos.x, pos.y)
+    if node then
+      nodes.edit_label_at_cursor()
+      return
+    end
+    
+    vim.notify('No connection or node at cursor position', vim.log.levels.WARN)
   end, opts)
   
   -- View controls

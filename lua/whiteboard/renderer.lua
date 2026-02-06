@@ -45,6 +45,7 @@ end
 
 function M.render_node(node)
   local bufnr = canvas.get_bufnr()
+  local ns = canvas.get_namespace()
   local shape_lines = shapes.render(node)
 
   for i, line in ipairs(shape_lines) do
@@ -85,6 +86,18 @@ function M.render_node(node)
 
       local new_line = prefix .. line .. suffix
       vim.api.nvim_buf_set_lines(bufnr, row, row + 1, false, { new_line })
+    end
+  end
+
+  -- Render node label above the node if it exists
+  if node.label and node.label ~= '' then
+    local label_row = node.y - 2  -- One line above the node (0-indexed)
+    if label_row >= 0 then
+      local label_col = node.x + math.floor(node.width / 2) - math.floor(vim.fn.strdisplaywidth(node.label) / 2)
+      vim.api.nvim_buf_set_extmark(bufnr, ns, label_row - 1, label_col - 1, {
+        virt_text = {{node.label, 'Comment'}},
+        virt_text_pos = 'overlay',
+      })
     end
   end
 end
