@@ -201,11 +201,25 @@ function M.draw_connection_line(bufnr, ns, from_node, to_node, conn)
 end
 
 function M.draw_char(bufnr, ns, row, col, char)
-  if row >= 0 and col >= 0 then
-    vim.api.nvim_buf_set_extmark(bufnr, ns, row, col, {
-      virt_text = {{char, 'Normal'}},
-      virt_text_pos = 'overlay',
-    })
+  if row >= 0 and col >= 0 and row < config.options.canvas.height then
+    vim.api.nvim_buf_set_option(bufnr, 'modifiable', true)
+    local current_line = vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false)[1] or ''
+
+    -- Ensure line is long enough
+    while #current_line <= col do
+      current_line = current_line .. ' '
+    end
+
+    -- Replace character at position
+    local new_line
+    if col == 0 then
+      new_line = char .. current_line:sub(2)
+    else
+      new_line = current_line:sub(1, col) .. char .. current_line:sub(col + 2)
+    end
+
+    vim.api.nvim_buf_set_lines(bufnr, row, row + 1, false, { new_line })
+    vim.api.nvim_buf_set_option(bufnr, 'modifiable', false)
   end
 end
 
