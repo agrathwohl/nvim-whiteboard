@@ -65,6 +65,7 @@ function M.add_at_cursor(use_selector)
 
     local id = M.add(node)
     require('whiteboard.renderer').render()
+    M.edit_node(id)
   end
 
   if use_selector == false and ui.selected_shape then

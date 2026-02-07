@@ -179,7 +179,7 @@ function M.draw_connection_line(bufnr, ns, from_node, to_node, conn)
     end
 
     -- Second horizontal segment
-    for x = math.min(mid_x, x2), math.max(mid_x, x2) do
+    for x = math.min(mid_x, x2), math.max(mid_x, x2) - 1 do
       M.draw_char(bufnr, ns, y2, x, style.char)
     end
   else
@@ -197,7 +197,7 @@ function M.draw_connection_line(bufnr, ns, from_node, to_node, conn)
     end
 
     -- Second vertical segment
-    for y = math.min(mid_y, y2), math.max(mid_y, y2) do
+    for y = math.min(mid_y, y2), math.max(mid_y, y2) - 1 do
       M.draw_char(bufnr, ns, y, x2, '│')
     end
   end
