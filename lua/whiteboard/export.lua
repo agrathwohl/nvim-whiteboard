@@ -3,303 +3,227 @@ local nodes = require('whiteboard.nodes')
 local connections = require('whiteboard.connections')
 local config = require('whiteboard.config')
 
+M.formats = { 'ascii', 'svg', 'plantuml', 'mermaid' }
+
+local function target_path(extension)
+  local name = require('whiteboard.canvas').get_name()
+  return config.options.save_directory .. '/' .. name .. '.' .. extension
+end
+
+local function write_file(path, contents)
+  vim.fn.mkdir(vim.fn.fnamemodify(path, ':h'), 'p')
+
+  local file, err = io.open(path, 'w')
+  if not file then
+    vim.notify('Export failed: ' .. (err or path), vim.log.levels.ERROR)
+    return false
+  end
+
+  file:write(contents)
+  file:close()
+  vim.notify('Exported: ' .. path, vim.log.levels.INFO)
+  return true
+end
+
 function M.export(format)
-  if format == 'ascii' then
-    return M.export_ascii()
-  elseif format == 'svg' then
-    return M.export_svg()
-  elseif format == 'plantuml' then
-    return M.export_plantuml()
-  elseif format == 'mermaid' then
-    return M.export_mermaid()
-  else
-    vim.notify('Unknown export format: ' .. format, vim.log.levels.ERROR)
+  local exporters = {
+    ascii = M.export_ascii,
+    svg = M.export_svg,
+    plantuml = M.export_plantuml,
+    mermaid = M.export_mermaid,
+  }
+
+  local exporter = exporters[format]
+  if not exporter then
+    vim.notify('Unknown export format: ' .. tostring(format)
+      .. ' (expected: ' .. table.concat(M.formats, ', ') .. ')', vim.log.levels.ERROR)
     return nil
   end
+
+  if vim.tbl_isempty(nodes.nodes) then
+    vim.notify('Nothing to export: the whiteboard is empty', vim.log.levels.WARN)
+    return nil
+  end
+
+  return exporter()
 end
 
 function M.export_ascii()
-  local canvas_width = config.options.canvas.width
-  local canvas_height = config.options.canvas.height
-  local grid = {}
-  
-  -- Initialize empty grid
-  for y = 1, canvas_height do
-    grid[y] = {}
-    for x = 1, canvas_width do
-      grid[y][x] = ' '
-    end
+  local renderer = require('whiteboard.renderer')
+  local lines = renderer.grid_to_lines(renderer.build_grid())
+
+  for i, line in ipairs(lines) do
+    lines[i] = (line:gsub('%s+$', ''))
   end
-  
-  -- Draw nodes
-  for _, node in pairs(nodes.get_all()) do
-    M.draw_node_to_grid(grid, node)
+  while #lines > 0 and lines[#lines] == '' do
+    lines[#lines] = nil
   end
-  
-  -- Draw connections
-  for _, conn in pairs(connections.get_all()) do
-    M.draw_connection_to_grid(grid, conn)
-  end
-  
-  -- Convert to string
-  local lines = {}
-  for y = 1, canvas_height do
-    local line = ''
-    for x = 1, canvas_width do
-      line = line .. grid[y][x]
-    end
-    table.insert(lines, line)
-  end
-  
-  -- Save to file
-  local filename = config.options.save_directory .. '/' .. require('whiteboard.canvas').get_name() .. '.txt'
-  local file = io.open(filename, 'w')
-  if file then
-    file:write(table.concat(lines, '\n'))
-    file:close()
-    vim.notify('Exported to ASCII: ' .. filename, vim.log.levels.INFO)
-  end
-  
-  return lines
+
+  local text = table.concat(lines, '\n')
+  write_file(target_path('txt'), text)
+  return text
 end
 
-function M.draw_node_to_grid(grid, node)
-  local x, y = node.x, node.y
-  local width, height = node.width, node.height
-  
-  -- Draw border
-  for i = 0, width - 1 do
-    if y > 0 and y <= #grid and x + i > 0 and x + i <= #grid[1] then
-      grid[y][x + i] = '─'
-      if y + height - 1 > 0 and y + height - 1 <= #grid then
-        grid[y + height - 1][x + i] = '─'
-      end
-    end
-  end
-  
-  for i = 0, height - 1 do
-    if y + i > 0 and y + i <= #grid and x > 0 and x <= #grid[1] then
-      grid[y + i][x] = '│'
-      if x + width - 1 > 0 and x + width - 1 <= #grid[1] then
-        grid[y + i][x + width - 1] = '│'
-      end
-    end
-  end
-  
-  -- Corners
-  if y > 0 and y <= #grid and x > 0 and x <= #grid[1] then
-    grid[y][x] = '┌'
-    if x + width - 1 > 0 and x + width - 1 <= #grid[1] then
-      grid[y][x + width - 1] = '┐'
-    end
-  end
-  
-  if y + height - 1 > 0 and y + height - 1 <= #grid then
-    if x > 0 and x <= #grid[1] then
-      grid[y + height - 1][x] = '└'
-    end
-    if x + width - 1 > 0 and x + width - 1 <= #grid[1] then
-      grid[y + height - 1][x + width - 1] = '┘'
-    end
-  end
-  
-  -- Draw text
-  local text_lines = require('whiteboard.utils').wrap_text(node.text, width - 2)
-  for i, text in ipairs(text_lines) do
-    local row = y + i
-    if row > 0 and row < y + height - 1 and row <= #grid then
-      for j = 1, #text do
-        local col = x + j
-        if col > 0 and col < x + width - 1 and col <= #grid[1] then
-          grid[row][col] = text:sub(j, j)
-        end
-      end
-    end
-  end
-end
-
-function M.draw_connection_to_grid(grid, conn)
-  local from_node = nodes.get_by_id(conn.from)
-  local to_node = nodes.get_by_id(conn.to)
-  
-  if not from_node or not to_node then return end
-  
-  local x1 = from_node.x + math.floor(from_node.width / 2)
-  local y1 = from_node.y + math.floor(from_node.height / 2)
-  local x2 = to_node.x + math.floor(to_node.width / 2)
-  local y2 = to_node.y + math.floor(to_node.height / 2)
-  
-  -- Simple line
-  if x1 == x2 then
-    -- Vertical line
-    for y = math.min(y1, y2), math.max(y1, y2) do
-      if y > 0 and y <= #grid and x1 > 0 and x1 <= #grid[1] then
-        grid[y][x1] = '│'
-      end
-    end
-  else
-    -- Horizontal line with vertical segment
-    local mid_x = math.floor((x1 + x2) / 2)
-    
-    for x = math.min(x1, mid_x), math.max(x1, mid_x) do
-      if y1 > 0 and y1 <= #grid and x > 0 and x <= #grid[1] then
-        grid[y1][x] = '─'
-      end
-    end
-    
-    for x = math.min(mid_x, x2), math.max(mid_x, x2) do
-      if y2 > 0 and y2 <= #grid and x > 0 and x <= #grid[1] then
-        grid[y2][x] = '─'
-      end
-    end
-    
-    for y = math.min(y1, y2), math.max(y1, y2) do
-      if y > 0 and y <= #grid and mid_x > 0 and mid_x <= #grid[1] then
-        grid[y][mid_x] = '│'
-      end
-    end
-  end
+local function xml_escape(text)
+  return (tostring(text)
+    :gsub('&', '&amp;')
+    :gsub('<', '&lt;')
+    :gsub('>', '&gt;')
+    :gsub('"', '&quot;'))
 end
 
 function M.export_svg()
-  local svg_options = config.options.export.svg
-  local width = svg_options.width
-  local height = svg_options.height
-  
-  local svg = {}
-  table.insert(svg, '<?xml version="1.0" encoding="UTF-8"?>')
-  table.insert(svg, '<svg width="' .. width .. '" height="' .. height .. '" xmlns="http://www.w3.org/2000/svg">')
-  table.insert(svg, '  <defs>')
-  table.insert(svg, '    <style>')
-  table.insert(svg, '      .node { fill: #f0f0f0; stroke: #333; stroke-width: 2; }')
-  table.insert(svg, '      .text { font-family: ' .. svg_options.font_family .. '; font-size: ' .. svg_options.font_size .. 'px; }')
-  table.insert(svg, '      .connection { stroke: #666; stroke-width: 2; fill: none; }')
-  table.insert(svg, '    </style>')
-  table.insert(svg, '  </defs>')
-  
-  -- Draw connections
-  for _, conn in pairs(connections.get_all()) do
+  local opts = config.options.export.svg
+  local cw = opts.cell_width
+  local ch = opts.cell_height
+  local width = config.options.canvas.width * cw
+  local height = config.options.canvas.height * ch
+
+  local svg = {
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    string.format('<svg width="%d" height="%d" viewBox="0 0 %d %d" xmlns="http://www.w3.org/2000/svg">',
+      width, height, width, height),
+    '  <style>',
+    '    .node { fill: #f6f6f6; stroke: #333; stroke-width: 2; }',
+    string.format('    .text { font-family: %s; font-size: %dpx; }',
+      xml_escape(opts.font_family), opts.font_size),
+    '    .connection { stroke: #666; stroke-width: 2; fill: none; }',
+    '    .label { font-family: ' .. xml_escape(opts.font_family) .. '; font-size: 11px; fill: #666; }',
+    '  </style>',
+  }
+
+  local renderer = require('whiteboard.renderer')
+
+  for _, conn in pairs(connections.connections) do
     local from_node = nodes.get_by_id(conn.from)
     local to_node = nodes.get_by_id(conn.to)
-    
+
     if from_node and to_node then
-      local x1 = from_node.x * 8
-      local y1 = from_node.y * 16
-      local x2 = to_node.x * 8
-      local y2 = to_node.y * 16
-      
-      table.insert(svg, string.format('  <line x1="%d" y1="%d" x2="%d" y2="%d" class="connection" />',
-        x1, y1, x2, y2))
+      local segments = renderer.route(from_node, to_node)
+
+      for _, seg in ipairs(segments) do
+        svg[#svg + 1] = string.format(
+          '  <line x1="%d" y1="%d" x2="%d" y2="%d" class="connection" />',
+          (seg.x1 - 1) * cw, (seg.y1 - 1) * ch, (seg.x2 - 1) * cw, (seg.y2 - 1) * ch)
+      end
+
+      if conn.label and conn.label ~= '' then
+        local mid = segments[2]
+        svg[#svg + 1] = string.format(
+          '  <text x="%d" y="%d" class="label" text-anchor="middle">%s</text>',
+          math.floor((mid.x1 + mid.x2) / 2 - 1) * cw,
+          math.floor((mid.y1 + mid.y2) / 2 - 1) * ch - 4,
+          xml_escape(conn.label))
+      end
     end
   end
-  
-  -- Draw nodes
-  for _, node in pairs(nodes.get_all()) do
-    local x = node.x * 8
-    local y = node.y * 16
-    local w = node.width * 8
-    local h = node.height * 16
-    
-    table.insert(svg, string.format('  <rect x="%d" y="%d" width="%d" height="%d" class="node" />',
-      x, y, w, h))
-    table.insert(svg, string.format('  <text x="%d" y="%d" class="text" text-anchor="middle">%s</text>',
-      x + w / 2, y + h / 2 + 5, node.text:gsub('<', '&lt;'):gsub('>', '&gt;')))
+
+  for _, node in ipairs(nodes.sorted()) do
+    local x = (node.x - 1) * cw
+    local y = (node.y - 1) * ch
+    local w = node.width * cw
+    local h = node.height * ch
+
+    svg[#svg + 1] = string.format('  <rect x="%d" y="%d" width="%d" height="%d" rx="4" class="node" />',
+      x, y, w, h)
+    svg[#svg + 1] = string.format(
+      '  <text x="%d" y="%d" class="text" text-anchor="middle">%s</text>',
+      x + w / 2, y + h / 2 + opts.font_size / 3, xml_escape(node.text))
   end
-  
-  table.insert(svg, '</svg>')
-  
-  -- Save
-  local filename = config.options.save_directory .. '/' .. require('whiteboard.canvas').get_name() .. '.svg'
-  local file = io.open(filename, 'w')
-  if file then
-    file:write(table.concat(svg, '\n'))
-    file:close()
-    vim.notify('Exported to SVG: ' .. filename, vim.log.levels.INFO)
-  end
-  
-  return table.concat(svg, '\n')
+
+  svg[#svg + 1] = '</svg>'
+
+  local text = table.concat(svg, '\n')
+  write_file(target_path('svg'), text)
+  return text
+end
+
+local PLANTUML_ELEMENTS = {
+  box = 'rectangle',
+  database = 'database',
+  cloud = 'cloud',
+  server = 'node',
+  client = 'actor',
+  api = 'interface',
+  service = 'component',
+  queue = 'queue',
+  cache = 'database',
+  component = 'component',
+  class = 'rectangle',
+  function_ = 'component',
+  module = 'package',
+  package = 'package',
+  router = 'node',
+  firewall = 'node',
+  switch = 'node',
+  load_balancer = 'node',
+}
+
+local function quoted(text)
+  return '"' .. tostring(text):gsub('"', "'"):gsub('\n', ' ') .. '"'
 end
 
 function M.export_plantuml()
-  local puml = {}
-  
-  table.insert(puml, '@startuml')
-  
+  local puml = { '@startuml' }
+
   if config.options.export.plantuml.skinparam then
-    table.insert(puml, 'skinparam backgroundColor #FEFEFE')
-    table.insert(puml, 'skinparam componentStyle rectangle')
+    puml[#puml + 1] = 'skinparam backgroundColor #FEFEFE'
+    puml[#puml + 1] = 'skinparam componentStyle rectangle'
   end
-  
-  -- Define nodes
-  for id, node in pairs(nodes.get_all()) do
-    local shape_type = node.shape or 'component'
-    local line = string.format('%s "%s" as node%d', shape_type:gsub('_', ''), node.text, id)
-    table.insert(puml, line)
+
+  for _, node in ipairs(nodes.sorted()) do
+    puml[#puml + 1] = string.format('%s %s as node%d',
+      PLANTUML_ELEMENTS[node.shape] or 'rectangle', quoted(node.text), node.id)
   end
-  
-  -- Define connections
-  for _, conn in pairs(connections.get_all()) do
+
+  for _, conn in pairs(connections.connections) do
     local line = string.format('node%d --> node%d', conn.from, conn.to)
     if conn.label and conn.label ~= '' then
-      line = line .. ' : ' .. conn.label
+      line = line .. ' : ' .. conn.label:gsub('\n', ' ')
     end
-    table.insert(puml, line)
+    puml[#puml + 1] = line
   end
-  
-  table.insert(puml, '@enduml')
-  
-  -- Save
-  local filename = config.options.save_directory .. '/' .. require('whiteboard.canvas').get_name() .. '.puml'
-  local file = io.open(filename, 'w')
-  if file then
-    file:write(table.concat(puml, '\n'))
-    file:close()
-    vim.notify('Exported to PlantUML: ' .. filename, vim.log.levels.INFO)
-  end
-  
-  return table.concat(puml, '\n')
+
+  puml[#puml + 1] = '@enduml'
+
+  local text = table.concat(puml, '\n')
+  write_file(target_path('puml'), text)
+  return text
 end
 
 function M.export_mermaid()
-  local mmd = {}
-  
-  table.insert(mmd, 'graph TD')
-  
-  -- Define nodes
-  for id, node in pairs(nodes.get_all()) do
-    local shape = node.shape or 'box'
-    local node_id = 'node' .. id
-    
-    local line
-    if shape == 'database' then
-      line = string.format('%s[("%s")]', node_id, node.text)
-    elseif shape == 'cloud' then
-      line = string.format('%s{"%s"}', node_id, node.text)
+  local mmd = { 'graph TD' }
+
+  for _, node in ipairs(nodes.sorted()) do
+    local label = quoted(node.text)
+    local body
+
+    if node.shape == 'database' or node.shape == 'cache' then
+      body = string.format('node%d[(%s)]', node.id, label)
+    elseif node.shape == 'cloud' then
+      body = string.format('node%d{{%s}}', node.id, label)
+    elseif node.shape == 'queue' then
+      body = string.format('node%d>%s]', node.id, label)
     else
-      line = string.format('%s["%s"]', node_id, node.text)
+      body = string.format('node%d[%s]', node.id, label)
     end
-    
-    table.insert(mmd, '    ' .. line)
+
+    mmd[#mmd + 1] = '    ' .. body
   end
-  
-  -- Define connections
-  for _, conn in pairs(connections.get_all()) do
-    local from_id = 'node' .. conn.from
-    local to_id = 'node' .. conn.to
-    local line = string.format('%s -->|%s| %s', from_id, conn.label or '', to_id)
-    table.insert(mmd, '    ' .. line)
+
+  for _, conn in pairs(connections.connections) do
+    local label = conn.label or ''
+    if label ~= '' then
+      mmd[#mmd + 1] = string.format('    node%d -->|%s| node%d',
+        conn.from, label:gsub('|', '/'):gsub('\n', ' '), conn.to)
+    else
+      mmd[#mmd + 1] = string.format('    node%d --> node%d', conn.from, conn.to)
+    end
   end
-  
-  -- Save
-  local filename = config.options.save_directory .. '/' .. require('whiteboard.canvas').get_name() .. '.mmd'
-  local file = io.open(filename, 'w')
-  if file then
-    file:write(table.concat(mmd, '\n'))
-    file:close()
-    vim.notify('Exported to Mermaid: ' .. filename, vim.log.levels.INFO)
-  end
-  
-  return table.concat(mmd, '\n')
+
+  local text = table.concat(mmd, '\n')
+  write_file(target_path('mmd'), text)
+  return text
 end
 
 return M

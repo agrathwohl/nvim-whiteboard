@@ -1,269 +1,168 @@
 local M = {}
 local config = require('whiteboard.config')
 
-M.state = {
-  name = nil,
-  bufnr = nil,
-  winnr = nil,
-  namespace = nil,
-  cursor = { x = 1, y = 1 },
-  offset = { x = 0, y = 0 },
-  zoom = 1.0,
-  grid_ns = nil,
-}
+local function blank_state()
+  return {
+    name = nil,
+    bufnr = nil,
+    winnr = nil,
+    namespace = nil,
+    cursor = { x = 1, y = 1 },
+  }
+end
+
+M.state = blank_state()
+
+function M.is_open()
+  return M.state.bufnr ~= nil and vim.api.nvim_buf_is_valid(M.state.bufnr)
+end
 
 function M.create(name)
+  if M.is_open() then
+    M.close()
+  end
+
+  M.state = blank_state()
   M.state.name = name
-  M.state.namespace = vim.api.nvim_create_namespace('whiteboard_' .. name)
-  M.state.grid_ns = vim.api.nvim_create_namespace('whiteboard_grid_' .. name)
-  
-  -- Create buffer
+  M.state.namespace = vim.api.nvim_create_namespace('whiteboard')
+
   M.state.bufnr = vim.api.nvim_create_buf(false, true)
-  vim.api.nvim_buf_set_option(M.state.bufnr, 'buftype', 'nofile')
-  vim.api.nvim_buf_set_option(M.state.bufnr, 'swapfile', false)
-  vim.api.nvim_buf_set_option(M.state.bufnr, 'bufhidden', 'wipe')
-  vim.api.nvim_buf_set_option(M.state.bufnr, 'filetype', 'whiteboard')
-  
-  -- Calculate window size
+  vim.bo[M.state.bufnr].buftype = 'nofile'
+  vim.bo[M.state.bufnr].swapfile = false
+  vim.bo[M.state.bufnr].bufhidden = 'wipe'
+  vim.bo[M.state.bufnr].filetype = 'whiteboard'
+
   local ui = vim.api.nvim_list_uis()[1]
-  local width = math.min(config.options.canvas.width, ui.width - 10)
-  local height = math.min(config.options.canvas.height, ui.height - 10)
-  
-  -- Create window
-  local win_opts = {
+  local avail_width = ui and ui.width or vim.o.columns
+  local avail_height = ui and ui.height or vim.o.lines
+  local width = math.min(config.options.canvas.width, avail_width - 10)
+  local height = math.min(config.options.canvas.height, avail_height - 10)
+
+  M.state.winnr = vim.api.nvim_open_win(M.state.bufnr, true, {
     relative = 'editor',
     width = width,
     height = height,
-    col = math.floor((ui.width - width) / 2),
-    row = math.floor((ui.height - height) / 2),
+    col = math.floor((avail_width - width) / 2),
+    row = math.floor((avail_height - height) / 2),
     style = 'minimal',
     border = config.options.ui.style.border,
     title = ' ' .. name .. ' ',
     title_pos = 'center',
-  }
-  
-  M.state.winnr = vim.api.nvim_open_win(M.state.bufnr, true, win_opts)
-  
-  -- Set window options
-  vim.api.nvim_win_set_option(M.state.winnr, 'cursorline', false)
-  vim.api.nvim_win_set_option(M.state.winnr, 'cursorcolumn', false)
-  vim.api.nvim_win_set_option(M.state.winnr, 'number', false)
-  vim.api.nvim_win_set_option(M.state.winnr, 'relativenumber', false)
-  vim.api.nvim_win_set_option(M.state.winnr, 'signcolumn', 'no')
-  vim.api.nvim_win_set_option(M.state.winnr, 'winhighlight', 
-    'Normal:Normal,FloatBorder:' .. config.options.ui.style.border_highlight)
-  
-  -- Initialize canvas content
+  })
+
+  vim.wo[M.state.winnr].cursorline = false
+  vim.wo[M.state.winnr].cursorcolumn = false
+  vim.wo[M.state.winnr].number = false
+  vim.wo[M.state.winnr].relativenumber = false
+  vim.wo[M.state.winnr].signcolumn = 'no'
+  vim.wo[M.state.winnr].winhighlight =
+    'Normal:Normal,FloatBorder:' .. config.options.ui.style.border_highlight
+
   M.initialize_canvas()
-  
-  -- Draw grid if enabled
-  if config.options.canvas.show_grid then
-    M.draw_grid()
-  end
-  
-  -- Set up keymaps
   M.setup_keymaps()
-  
+
   return M.state
 end
 
 function M.initialize_canvas()
   local lines = {}
-  local width = config.options.canvas.width
-  
-  for i = 1, config.options.canvas.height do
-    table.insert(lines, string.rep(' ', width))
+  for _ = 1, config.options.canvas.height do
+    table.insert(lines, string.rep(' ', config.options.canvas.width))
   end
-  
   vim.api.nvim_buf_set_lines(M.state.bufnr, 0, -1, false, lines)
 end
 
-function M.draw_grid()
-  if not M.state.grid_ns then return end
-
-  local grid_size = config.options.canvas.grid_size
-  local height = config.options.canvas.height
-  local width = config.options.canvas.width
-
-  vim.api.nvim_buf_clear_namespace(M.state.bufnr, M.state.grid_ns, 0, -1)
-
-  -- Draw horizontal grid lines
-  for row = 0, height - 1, grid_size do
-    for col = 0, width - 1 do
-      vim.api.nvim_buf_set_extmark(M.state.bufnr, M.state.grid_ns, row, col, {
-        virt_text = {{'·', 'Comment'}},
-        virt_text_pos = 'overlay',
-      })
-    end
-  end
-
-  -- Draw vertical grid lines
-  for col = 0, width - 1, grid_size do
-    for row = 0, height - 1 do
-      vim.api.nvim_buf_set_extmark(M.state.bufnr, M.state.grid_ns, row, col, {
-        virt_text = {{'·', 'Comment'}},
-        virt_text_pos = 'overlay',
-      })
-    end
-  end
-end
-
 function M.setup_keymaps()
-  local keymaps = config.options.keymaps
+  local km = config.options.keymaps
   local opts = { buffer = M.state.bufnr, silent = true }
-  
-  -- Navigation (arrow keys and hjkl)
-  vim.keymap.set('n', keymaps.move_up, function() M.move_cursor(0, -1) end, opts)
-  vim.keymap.set('n', keymaps.move_down, function() M.move_cursor(0, 1) end, opts)
-  vim.keymap.set('n', keymaps.move_left, function() M.move_cursor(-1, 0) end, opts)
-  vim.keymap.set('n', keymaps.move_right, function() M.move_cursor(1, 0) end, opts)
-  vim.keymap.set('n', 'k', function() M.move_cursor(0, -1) end, opts)
-  vim.keymap.set('n', 'j', function() M.move_cursor(0, 1) end, opts)
-  vim.keymap.set('n', 'h', function() M.move_cursor(-1, 0) end, opts)
-  vim.keymap.set('n', 'l', function() M.move_cursor(1, 0) end, opts)
-  
-  -- Fast movement with Ctrl
-  vim.keymap.set('n', '<C-Up>', function() M.move_cursor(0, -5) end, opts)
-  vim.keymap.set('n', '<C-Down>', function() M.move_cursor(0, 5) end, opts)
-  vim.keymap.set('n', '<C-Left>', function() M.move_cursor(-5, 0) end, opts)
-  vim.keymap.set('n', '<C-Right>', function() M.move_cursor(5, 0) end, opts)
-  
-  -- Actions
-  vim.keymap.set('n', keymaps.add_node, function()
-    require('whiteboard.nodes').add_at_cursor(true)  -- with selector
-  end, opts)
 
-  vim.keymap.set('n', 'a', function()
-    require('whiteboard.nodes').add_at_cursor(false)  -- quick add with selected shape
-  end, opts)
-  
-  vim.keymap.set('n', keymaps.delete_node, function()
-    require('whiteboard.nodes').delete_at_cursor()
-  end, opts)
+  local function map(lhs, fn)
+    if lhs and lhs ~= '' then
+      vim.keymap.set('n', lhs, fn, opts)
+    end
+  end
 
-  vim.keymap.set('n', 'D', function()
+  local function nodes()
+    return require('whiteboard.nodes')
+  end
+
+  local cursor_moves = {
+    [km.move_up] = { 0, -1 }, [km.move_up_alt] = { 0, -1 },
+    [km.move_down] = { 0, 1 }, [km.move_down_alt] = { 0, 1 },
+    [km.move_left] = { -1, 0 }, [km.move_left_alt] = { -1, 0 },
+    [km.move_right] = { 1, 0 }, [km.move_right_alt] = { 1, 0 },
+    [km.move_fast_up] = { 0, -5 }, [km.move_fast_down] = { 0, 5 },
+    [km.move_fast_left] = { -5, 0 }, [km.move_fast_right] = { 5, 0 },
+  }
+  for lhs, d in pairs(cursor_moves) do
+    map(lhs, function() M.move_cursor(d[1], d[2]) end)
+  end
+
+  local node_moves = {
+    [km.node_up] = { 0, -1 }, [km.node_up_alt] = { 0, -1 },
+    [km.node_down] = { 0, 1 }, [km.node_down_alt] = { 0, 1 },
+    [km.node_left] = { -1, 0 }, [km.node_left_alt] = { -1, 0 },
+    [km.node_right] = { 1, 0 }, [km.node_right_alt] = { 1, 0 },
+  }
+  for lhs, d in pairs(node_moves) do
+    map(lhs, function() nodes().move_at_cursor(d[1], d[2]) end)
+  end
+
+  local resizes = {
+    [km.resize_wider] = { 2, 0 },
+    [km.resize_narrower] = { -2, 0 },
+    [km.resize_taller] = { 0, 1 },
+    [km.resize_shorter] = { 0, -1 },
+  }
+  for lhs, d in pairs(resizes) do
+    map(lhs, function() nodes().resize_at_cursor(d[1], d[2]) end)
+  end
+
+  map(km.add_node, function() nodes().add_at_cursor(true) end)
+  map(km.quick_add, function() nodes().add_at_cursor(false) end)
+  map(km.delete_node, function() nodes().delete_at_cursor() end)
+  map(km.duplicate, function() nodes().duplicate_at_cursor() end)
+  map(km.edit_text, function() nodes().edit_at_cursor() end)
+
+  map(km.delete_connection, function()
     require('whiteboard.connections').delete_connection_at_cursor()
-  end, opts)
-  
-  vim.keymap.set('n', keymaps.edit_text, function()
-    require('whiteboard.nodes').edit_at_cursor()
-  end, opts)
-
-  -- Node movement (Shift + arrow keys OR capital HJKL)
-  vim.keymap.set('n', '<S-Up>', function()
-    require('whiteboard.nodes').move_at_cursor(0, -1)
-  end, opts)
-  vim.keymap.set('n', '<S-Down>', function()
-    require('whiteboard.nodes').move_at_cursor(0, 1)
-  end, opts)
-  vim.keymap.set('n', '<S-Left>', function()
-    require('whiteboard.nodes').move_at_cursor(-1, 0)
-  end, opts)
-  vim.keymap.set('n', '<S-Right>', function()
-    require('whiteboard.nodes').move_at_cursor(1, 0)
-  end, opts)
-  -- Alternative: capital HJKL for node movement
-  vim.keymap.set('n', 'K', function()
-    require('whiteboard.nodes').move_at_cursor(0, -1)
-  end, opts)
-  vim.keymap.set('n', 'J', function()
-    require('whiteboard.nodes').move_at_cursor(0, 1)
-  end, opts)
-  vim.keymap.set('n', 'H', function()
-    require('whiteboard.nodes').move_at_cursor(-1, 0)
-  end, opts)
-  vim.keymap.set('n', 'L', function()
-    require('whiteboard.nodes').move_at_cursor(1, 0)
-  end, opts)
-
-  -- Node resizing: > < for width, + - for height
-  vim.keymap.set('n', '>', function()
-    require('whiteboard.nodes').resize_at_cursor(2, 0)
-  end, opts)
-  vim.keymap.set('n', '<', function()
-    require('whiteboard.nodes').resize_at_cursor(-2, 0)
-  end, opts)
-  vim.keymap.set('n', '=', function()
-    require('whiteboard.nodes').resize_at_cursor(0, 1)
-  end, opts)
-  vim.keymap.set('n', '-', function()
-    require('whiteboard.nodes').resize_at_cursor(0, -1)
-  end, opts)
-
-  -- Connection mode
-  vim.keymap.set('n', keymaps.start_connect, function()
+  end)
+  map(km.start_connect, function()
     require('whiteboard.connections').start_connection()
-  end, opts)
+  end)
 
-  -- Label connection or node (press 'E' on a connection line or node)
-  vim.keymap.set('n', 'E', function()
+  map(km.edit_label, function()
     local connections = require('whiteboard.connections')
-    local nodes = require('whiteboard.nodes')
     local pos = M.get_cursor_pos()
-    
-    -- Check for connection first
-    local conn = connections.get_connection_at(pos.x, pos.y)
-    if conn then
+
+    if connections.get_connection_at(pos.x, pos.y) then
       connections.edit_label_at_cursor()
-      return
+    elseif nodes().get_node_at(pos.x, pos.y) then
+      nodes().edit_label_at_cursor()
+    else
+      vim.notify('No connection or node at cursor position', vim.log.levels.WARN)
     end
-    
-    -- Check for node
-    local node = nodes.get_node_at(pos.x, pos.y)
-    if node then
-      nodes.edit_label_at_cursor()
-      return
-    end
-    
-    vim.notify('No connection or node at cursor position', vim.log.levels.WARN)
-  end, opts)
-  
-  -- View controls
-  vim.keymap.set('n', keymaps.toggle_grid, M.toggle_grid, opts)
+  end)
 
-  -- Zoom controls
-  vim.keymap.set('n', '+', function() M.zoom(0.1) end, opts)
-  vim.keymap.set('n', '-', function() M.zoom(-0.1) end, opts)
-  vim.keymap.set('n', '=', function() M.zoom(0.1) end, opts)
-  vim.keymap.set('n', '_', function() M.zoom(-0.1) end, opts)
-  
-  -- Duplicate node
-  vim.keymap.set('n', '<C-d>', function()
-    require('whiteboard.nodes').duplicate_at_cursor()
-  end, opts)
-
-  -- File operations
-  vim.keymap.set('n', keymaps.save, function()
-    require('whiteboard').save()
-  end, opts)
-  
-  vim.keymap.set('n', keymaps.close, function()
-    require('whiteboard').close()
-  end, opts)
+  map(km.toggle_grid, M.toggle_grid)
+  map(km.save, function() require('whiteboard').save() end)
+  map(km.close, function() require('whiteboard').close() end)
 end
 
 function M.move_cursor(dx, dy)
-  local new_x = math.max(1, math.min(config.options.canvas.width, M.state.cursor.x + dx))
-  local new_y = math.max(1, math.min(config.options.canvas.height, M.state.cursor.y + dy))
-  
-  M.state.cursor.x = new_x
-  M.state.cursor.y = new_y
-  
-  vim.api.nvim_win_set_cursor(M.state.winnr, { new_y, new_x - 1 })
-end
+  if not (M.state.winnr and vim.api.nvim_win_is_valid(M.state.winnr)) then
+    return
+  end
 
-function M.zoom(delta)
-  M.state.zoom = math.max(0.5, math.min(2.0, M.state.zoom + delta))
-  require('whiteboard.renderer').render()
+  M.state.cursor.x = math.max(1, math.min(config.options.canvas.width, M.state.cursor.x + dx))
+  M.state.cursor.y = math.max(1, math.min(config.options.canvas.height, M.state.cursor.y + dy))
+
+  vim.api.nvim_win_set_cursor(M.state.winnr, { M.state.cursor.y, M.state.cursor.x - 1 })
 end
 
 function M.toggle_grid()
   config.options.canvas.show_grid = not config.options.canvas.show_grid
-  if config.options.canvas.show_grid then
-    M.draw_grid()
-  else
-    vim.api.nvim_buf_clear_namespace(M.state.bufnr, M.state.grid_ns, 0, -1)
-  end
+  require('whiteboard.renderer').render()
 end
 
 function M.get_cursor_pos()
@@ -276,7 +175,7 @@ function M.get_cursor_pos()
 end
 
 function M.get_name()
-  return M.state.name
+  return M.state.name or 'untitled'
 end
 
 function M.get_bufnr()
@@ -295,16 +194,17 @@ function M.get_state()
   return {
     name = M.state.name,
     cursor = M.state.cursor,
-    offset = M.state.offset,
-    zoom = M.state.zoom,
   }
 end
 
 function M.load(state)
-  M.state.name = state.name
-  M.state.cursor = state.cursor
-  M.state.offset = state.offset
-  M.state.zoom = state.zoom
+  if type(state) ~= 'table' then
+    return
+  end
+  M.state.name = state.name or M.state.name
+  if type(state.cursor) == 'table' and state.cursor.x and state.cursor.y then
+    M.state.cursor = { x = state.cursor.x, y = state.cursor.y }
+  end
 end
 
 function M.close()
@@ -314,17 +214,8 @@ function M.close()
   if M.state.bufnr and vim.api.nvim_buf_is_valid(M.state.bufnr) then
     vim.api.nvim_buf_delete(M.state.bufnr, { force = true })
   end
-  
-  M.state = {
-    name = nil,
-    bufnr = nil,
-    winnr = nil,
-    namespace = nil,
-    cursor = { x = 1, y = 1 },
-    offset = { x = 0, y = 0 },
-    zoom = 1.0,
-    grid_ns = nil,
-  }
+
+  M.state = blank_state()
 end
 
 return M

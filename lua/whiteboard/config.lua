@@ -1,43 +1,32 @@
 local M = {}
 
 M.defaults = {
-  -- Canvas settings
   canvas = {
     width = 120,
     height = 40,
-    grid_size = 2,
+    grid_size = 4,
     show_grid = true,
-    background = 'Normal',
   },
-  
-  -- UI settings
+
   ui = {
     toolbar = {
       enabled = true,
-      position = 'top',
       height = 3,
     },
     sidebar = {
       enabled = true,
-      position = 'left',
       width = 25,
     },
-    -- Modern styling
     style = {
       border = 'rounded',
-      title_highlight = 'Title',
       border_highlight = 'FloatBorder',
-      selected_highlight = 'Visual',
-    }
+    },
   },
-  
-  -- Shape styles
+
   shapes = {
     default_style = {
       border = 'single',
-      padding = 1,
     },
-    -- Predefined shape types with icons
     types = {
       box = { icon = '󰝤', label = 'Box' },
       database = { icon = '󰆼', label = 'Database' },
@@ -57,98 +46,83 @@ M.defaults = {
       firewall = { icon = '󰒘', label = 'Firewall' },
       switch = { icon = '󰇄', label = 'Switch' },
       load_balancer = { icon = '󰿏', label = 'Load Balancer' },
-    }
+    },
   },
-  
-  -- Connection styles
+
   connections = {
     styles = {
-      solid = { char = '─', corner = '┌', arrow = '▶' },
-      dashed = { char = '┄', corner = '╌', arrow = '▷' },
-      dotted = { char = '·', corner = '·', arrow = '→' },
-      bold = { char = '━', corner = '┏', arrow = '▶' },
+      solid = { char = '─', arrow = '▶' },
+      dashed = { char = '┄', arrow = '▷' },
+      dotted = { char = '┈', arrow = '→' },
+      bold = { char = '━', arrow = '▶' },
     },
     default_style = 'solid',
-    labels = {
-      enabled = true,
-      position = 'middle',
-    }
   },
-  
-  -- Keymaps
+
   keymaps = {
-    -- Mode toggles
-    normal_mode = 'n',
-    insert_mode = 'i',
-    visual_mode = 'v',
-    connect_mode = 'c',
-    
-    -- Navigation (arrows move cursor, Ctrl+arrows fast move, Shift+arrows move node)
     move_up = '<Up>',
     move_down = '<Down>',
     move_left = '<Left>',
     move_right = '<Right>',
-    
-    -- Actions
+    move_up_alt = 'k',
+    move_down_alt = 'j',
+    move_left_alt = 'h',
+    move_right_alt = 'l',
+
+    move_fast_up = '<C-Up>',
+    move_fast_down = '<C-Down>',
+    move_fast_left = '<C-Left>',
+    move_fast_right = '<C-Right>',
+
     add_node = '<CR>',
+    quick_add = 'a',
     delete_node = '<Del>',
-    edit_text = '<C-e>',
+    delete_connection = 'D',
     duplicate = '<C-d>',
-    select = '<Space>',
-    
-    -- Connection
-    start_connect = 'c',
-    cancel_connect = '<Esc>',
-    
-    -- Node resize (> < for width, = - for height)
+    edit_text = '<C-e>',
+    edit_label = 'E',
+
+    node_up = '<S-Up>',
+    node_down = '<S-Down>',
+    node_left = '<S-Left>',
+    node_right = '<S-Right>',
+    node_up_alt = 'K',
+    node_down_alt = 'J',
+    node_left_alt = 'H',
+    node_right_alt = 'L',
+
     resize_wider = '>',
     resize_narrower = '<',
     resize_taller = '=',
     resize_shorter = '-',
 
-    -- Canvas
+    start_connect = 'c',
+    cancel_connect = '<Esc>',
+
     toggle_grid = 'g',
-    center_view = 'zz',
-    
-    -- UI
-    toggle_toolbar = '<leader>t',
-    toggle_sidebar = '<leader>s',
-    
-    -- File
     save = '<C-s>',
     close = '<C-q>',
   },
-  
-  -- Save settings
+
   save_directory = vim.fn.stdpath('data') .. '/whiteboard',
-  autosave = false,
-  autosave_interval = 300000, -- 5 minutes
-  
-  -- Export settings
+
   export = {
-    ascii = {
-      compact = false,
-      use_unicode = true,
-    },
     svg = {
-      width = 800,
-      height = 600,
+      cell_width = 8,
+      cell_height = 16,
       font_family = 'monospace',
       font_size = 14,
     },
     plantuml = {
       skinparam = true,
-    }
-  }
+    },
+  },
 }
 
-M.options = {}
+M.options = vim.deepcopy(M.defaults)
 
 function M.setup(opts)
   M.options = vim.tbl_deep_extend('force', M.defaults, opts or {})
-  
-  -- Ensure save directory exists
-  vim.fn.mkdir(M.options.save_directory, 'p')
 end
 
 return M

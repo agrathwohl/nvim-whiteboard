@@ -3,8 +3,204 @@ local canvas = require('whiteboard.canvas')
 local nodes = require('whiteboard.nodes')
 local connections = require('whiteboard.connections')
 local shapes = require('whiteboard.shapes')
-local utils = require('whiteboard.utils')
 local config = require('whiteboard.config')
+
+-- The canvas is a grid of single display cells. Every draw path (screen render
+-- and ASCII export) builds the same grid, so what you see is what you export.
+
+local function split_chars(s)
+  return vim.fn.split(s, '\\zs')
+end
+
+function M.new_grid()
+  local grid = {}
+  for y = 1, config.options.canvas.height do
+    local row = {}
+    for x = 1, config.options.canvas.width do
+      row[x] = ' '
+    end
+    grid[y] = row
+  end
+  return grid
+end
+
+local function put(grid, x, y, ch)
+  local row = grid[y]
+  if row and row[x] then
+    row[x] = ch
+  end
+end
+
+function M.edge_point(node, target_x, target_y)
+  local cx = node.x + math.floor(node.width / 2)
+  local cy = node.y + math.floor(node.height / 2)
+  local dx = target_x - cx
+  local dy = target_y - cy
+
+  if math.abs(dx) > math.abs(dy) then
+    return (dx > 0) and (node.x + node.width - 1) or node.x, cy
+  end
+  return cx, (dy > 0) and (node.y + node.height - 1) or node.y
+end
+
+-- Drawing and hit-testing both consume this, so they cannot drift apart.
+function M.route(from_node, to_node)
+  local from_cx = from_node.x + math.floor(from_node.width / 2)
+  local from_cy = from_node.y + math.floor(from_node.height / 2)
+  local to_cx = to_node.x + math.floor(to_node.width / 2)
+  local to_cy = to_node.y + math.floor(to_node.height / 2)
+
+  local x1, y1 = M.edge_point(from_node, to_cx, to_cy)
+  local x2, y2 = M.edge_point(to_node, from_cx, from_cy)
+
+  local dx = x2 - x1
+  local dy = y2 - y1
+
+  if math.abs(dx) > math.abs(dy) then
+    local mid_x = math.floor((x1 + x2) / 2)
+    return {
+      { x1 = x1, y1 = y1, x2 = mid_x, y2 = y1, dir = 'h' },
+      { x1 = mid_x, y1 = y1, x2 = mid_x, y2 = y2, dir = 'v' },
+      { x1 = mid_x, y1 = y2, x2 = x2, y2 = y2, dir = 'h' },
+    }, { x = x2, y = y2, char = (dx > 0) and '▶' or '◀' }
+  end
+
+  local mid_y = math.floor((y1 + y2) / 2)
+  return {
+    { x1 = x1, y1 = y1, x2 = x1, y2 = mid_y, dir = 'v' },
+    { x1 = x1, y1 = mid_y, x2 = x2, y2 = mid_y, dir = 'h' },
+    { x1 = x2, y1 = mid_y, x2 = x2, y2 = y2, dir = 'v' },
+  }, { x = x2, y = y2, char = (dy > 0) and '▼' or '▲' }
+end
+
+function M.route_contains(segments, x, y)
+  for _, seg in ipairs(segments) do
+    if x >= math.min(seg.x1, seg.x2) and x <= math.max(seg.x1, seg.x2)
+      and y >= math.min(seg.y1, seg.y2) and y <= math.max(seg.y1, seg.y2) then
+      return true
+    end
+  end
+  return false
+end
+
+function M.draw_connection(grid, from_node, to_node, conn)
+  local style = config.options.connections.styles[conn.style]
+    or config.options.connections.styles.solid
+  local segments, arrow = M.route(from_node, to_node)
+
+  for _, seg in ipairs(segments) do
+    local ch = (seg.dir == 'h') and style.char or '│'
+    for y = math.min(seg.y1, seg.y2), math.max(seg.y1, seg.y2) do
+      for x = math.min(seg.x1, seg.x2), math.max(seg.x1, seg.x2) do
+        put(grid, x, y, ch)
+      end
+    end
+  end
+
+  put(grid, arrow.x, arrow.y, arrow.char)
+end
+
+function M.draw_node(grid, node)
+  local shape_lines = shapes.render(node)
+  for i, line in ipairs(shape_lines) do
+    local y = node.y + i - 1
+    local cells = split_chars(line)
+    for j, ch in ipairs(cells) do
+      put(grid, node.x + j - 1, y, ch)
+    end
+  end
+end
+
+function M.build_grid()
+  local grid = M.new_grid()
+
+  -- Connections first so nodes paint over them.
+  for _, conn in pairs(connections.connections) do
+    local from_node = nodes.get_by_id(conn.from)
+    local to_node = nodes.get_by_id(conn.to)
+    if from_node and to_node then
+      M.draw_connection(grid, from_node, to_node, conn)
+    end
+  end
+
+  for _, node in ipairs(nodes.sorted()) do
+    M.draw_node(grid, node)
+  end
+
+  if config.options.canvas.show_grid then
+    M.draw_grid(grid)
+  end
+
+  return grid
+end
+
+function M.draw_grid(grid)
+  local step = math.max(1, config.options.canvas.grid_size)
+  for y = 1, #grid, step do
+    for x = 1, #grid[y], step do
+      if grid[y][x] == ' ' then
+        grid[y][x] = '·'
+      end
+    end
+  end
+end
+
+function M.grid_to_lines(grid)
+  local lines = {}
+  for y = 1, #grid do
+    lines[y] = table.concat(grid[y])
+  end
+  return lines
+end
+
+-- Byte offset of cell x on grid row y. Extmark columns are byte indices, and
+-- the grid holds multi-byte box-drawing characters.
+local function byte_col(grid, x, y)
+  local row = grid[y]
+  if not row or x < 1 or x > #row then
+    return nil
+  end
+  local offset = 0
+  for i = 1, x - 1 do
+    offset = offset + #row[i]
+  end
+  return offset
+end
+
+local function place_label(bufnr, ns, grid, x, y, text)
+  local col = byte_col(grid, x, y)
+  if not col then
+    return
+  end
+  vim.api.nvim_buf_set_extmark(bufnr, ns, y - 1, col, {
+    virt_text = { { text, 'Comment' } },
+    virt_text_pos = 'overlay',
+  })
+end
+
+function M.render_labels(bufnr, ns, grid)
+  for _, node in pairs(nodes.nodes) do
+    if node.label and node.label ~= '' then
+      local width = vim.fn.strdisplaywidth(node.label)
+      local x = node.x + math.floor(node.width / 2) - math.floor(width / 2)
+      place_label(bufnr, ns, grid, math.max(1, x), node.y - 1, node.label)
+    end
+  end
+
+  for _, conn in pairs(connections.connections) do
+    if conn.label and conn.label ~= '' then
+      local from_node = nodes.get_by_id(conn.from)
+      local to_node = nodes.get_by_id(conn.to)
+      if from_node and to_node then
+        local segments = M.route(from_node, to_node)
+        local mid = segments[2]
+        local x = math.floor((mid.x1 + mid.x2) / 2)
+        local y = math.floor((mid.y1 + mid.y2) / 2)
+        place_label(bufnr, ns, grid, math.max(1, x), y, conn.label)
+      end
+    end
+  end
+end
 
 function M.render()
   local bufnr = canvas.get_bufnr()
@@ -14,270 +210,15 @@ function M.render()
     return
   end
 
-  -- Clear existing extmarks
   vim.api.nvim_buf_clear_namespace(bufnr, ns, 0, -1)
 
-  -- Clear buffer and reset to empty canvas
-  vim.api.nvim_buf_set_option(bufnr, 'modifiable', true)
-  local empty_lines = {}
-  for i = 1, config.options.canvas.height do
-    table.insert(empty_lines, string.rep(' ', config.options.canvas.width))
-  end
-  vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, empty_lines)
+  local grid = M.build_grid()
 
-  -- Render connections first (so nodes appear on top)
-  M.render_connections()
+  vim.bo[bufnr].modifiable = true
+  vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, M.grid_to_lines(grid))
+  vim.bo[bufnr].modifiable = false
 
-  -- Render nodes on top of connections
-  for id, node in pairs(nodes.nodes) do
-    M.render_node(node)
-  end
-
-  vim.api.nvim_buf_set_option(bufnr, 'modifiable', false)
-
-  -- Highlight selected node
-  if nodes.selected_id then
-    M.highlight_node(nodes.selected_id)
-  end
-end
-
-function M.render_node(node)
-  local bufnr = canvas.get_bufnr()
-  local ns = canvas.get_namespace()
-  local shape_lines = shapes.render(node)
-
-  for i, line in ipairs(shape_lines) do
-    local row = node.y + i - 2  -- 0-indexed
-    if row >= 0 and row < config.options.canvas.height then
-      local col = node.x - 1  -- 0-indexed display column
-
-      -- Get current line content
-      local current_line = vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false)[1] or ''
-
-      -- Get display widths
-      local line_display_width = vim.fn.strdisplaywidth(line)
-      local current_display_width = vim.fn.strdisplaywidth(current_line)
-
-      -- Ensure current line has enough display width
-      if current_display_width < col + line_display_width then
-        current_line = current_line .. string.rep(' ', col + line_display_width - current_display_width)
-      end
-
-      -- Convert display column to byte position
-      local prefix = ''
-      local suffix = ''
-
-      if col > 0 then
-        local byte_start = vim.fn.byteidx(current_line, col)
-        if byte_start > 0 then
-          prefix = current_line:sub(1, byte_start)
-        else
-          prefix = string.rep(' ', col)
-        end
-      end
-
-      local end_col = col + line_display_width
-      local byte_end = vim.fn.byteidx(current_line, end_col)
-      if byte_end > 0 and byte_end < #current_line then
-        suffix = current_line:sub(byte_end + 1)
-      end
-
-      local new_line = prefix .. line .. suffix
-      vim.api.nvim_buf_set_lines(bufnr, row, row + 1, false, { new_line })
-    end
-  end
-
-  -- Render node label above the node if it exists
-  if node.label and node.label ~= '' then
-    local label_row = node.y - 2  -- One line above the node (0-indexed)
-    if label_row >= 0 then
-      local label_col = node.x + math.floor(node.width / 2) - math.floor(vim.fn.strdisplaywidth(node.label) / 2)
-      vim.api.nvim_buf_set_extmark(bufnr, ns, label_row, label_col - 1, {
-        virt_text = {{node.label, 'Comment'}},
-        virt_text_pos = 'overlay',
-      })
-    end
-  end
-end
-
-function M.render_connections()
-  local bufnr = canvas.get_bufnr()
-  local ns = canvas.get_namespace()
-  local styles = config.options.connections.styles
-  
-  for _, conn in pairs(connections.connections) do
-    local from_node = nodes.get_by_id(conn.from)
-    local to_node = nodes.get_by_id(conn.to)
-    
-    if from_node and to_node then
-      M.draw_connection_line(bufnr, ns, from_node, to_node, conn)
-    end
-  end
-end
-
-function M.get_edge_connection_point(node, target_x, target_y)
-  -- Calculate center of node
-  local cx = node.x + math.floor(node.width / 2)
-  local cy = node.y + math.floor(node.height / 2)
-
-  -- Determine which edge to connect from based on target direction
-  local dx = target_x - cx
-  local dy = target_y - cy
-
-  local x, y
-
-  if math.abs(dx) > math.abs(dy) then
-    -- Connect from left or right edge
-    if dx > 0 then
-      x = node.x + node.width - 1  -- right edge
-    else
-      x = node.x  -- left edge
-    end
-    y = cy
-  else
-    -- Connect from top or bottom edge
-    if dy > 0 then
-      y = node.y + node.height - 1  -- bottom edge
-    else
-      y = node.y  -- top edge
-    end
-    x = cx
-  end
-
-  return x, y
-end
-
-function M.draw_connection_line(bufnr, ns, from_node, to_node, conn)
-  local style = config.options.connections.styles[conn.style] or config.options.connections.styles.solid
-
-  -- Calculate centers for direction
-  local from_cx = from_node.x + math.floor(from_node.width / 2)
-  local from_cy = from_node.y + math.floor(from_node.height / 2)
-  local to_cx = to_node.x + math.floor(to_node.width / 2)
-  local to_cy = to_node.y + math.floor(to_node.height / 2)
-
-  -- Get edge connection points
-  local x1, y1 = M.get_edge_connection_point(from_node, to_cx, to_cy)
-  local x2, y2 = M.get_edge_connection_point(to_node, from_cx, from_cy)
-
-  -- Determine primary direction
-  local dx = x2 - x1
-  local dy = y2 - y1
-
-  if math.abs(dx) > math.abs(dy) then
-    -- Primarily horizontal - draw horizontal then vertical
-    local mid_x = math.floor((x1 + x2) / 2)
-
-    -- First horizontal segment
-    for x = math.min(x1, mid_x), math.max(x1, mid_x) do
-      M.draw_char(bufnr, ns, y1, x, style.char)
-    end
-
-    -- Vertical segment
-    for y = math.min(y1, y2), math.max(y1, y2) do
-      M.draw_char(bufnr, ns, y, mid_x, '│')
-    end
-
-    -- Second horizontal segment
-    for x = math.min(mid_x, x2), math.max(mid_x, x2) - 1 do
-      M.draw_char(bufnr, ns, y2, x, style.char)
-    end
-  else
-    -- Primarily vertical - draw vertical then horizontal
-    local mid_y = math.floor((y1 + y2) / 2)
-
-    -- First vertical segment
-    for y = math.min(y1, mid_y), math.max(y1, mid_y) do
-      M.draw_char(bufnr, ns, y, x1, '│')
-    end
-
-    -- Horizontal segment
-    for x = math.min(x1, x2), math.max(x1, x2) do
-      M.draw_char(bufnr, ns, mid_y, x, style.char)
-    end
-
-    -- Second vertical segment
-    for y = math.min(mid_y, y2), math.max(mid_y, y2) - 1 do
-      M.draw_char(bufnr, ns, y, x2, '│')
-    end
-  end
-
-  -- Draw arrow pointing TOWARD destination (second object)
-  if math.abs(dx) > math.abs(dy) then
-    if x2 > x1 then
-      M.draw_char(bufnr, ns, y2, x2, '▶')  -- pointing right toward dest
-    else
-      M.draw_char(bufnr, ns, y2, x2, '◀')  -- pointing left toward dest
-    end
-  else
-    if y2 > y1 then
-      M.draw_char(bufnr, ns, y2, x2, '▼')  -- pointing down toward dest
-    else
-      M.draw_char(bufnr, ns, y2, x2, '▲')  -- pointing up toward dest
-    end
-  end
-
-  -- Draw label if exists
-  if conn.label and conn.label ~= '' then
-    local mid_x = math.floor((x1 + x2) / 2)
-    local mid_y = math.floor((y1 + y2) / 2)
-    vim.api.nvim_buf_set_extmark(bufnr, ns, mid_y - 1, mid_x, {
-      virt_text = {{conn.label, 'Comment'}},
-      virt_text_pos = 'overlay',
-    })
-  end
-end
-
-function M.draw_char(bufnr, ns, row, col, char)
-  if row >= 0 and col >= 0 and row < config.options.canvas.height then
-    local current_line = vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false)[1] or ''
-    local current_display_width = vim.fn.strdisplaywidth(current_line)
-
-    -- Ensure line is long enough (display width)
-    if current_display_width <= col then
-      current_line = current_line .. string.rep(' ', col - current_display_width + 1)
-    end
-
-    -- Convert display column to byte positions
-    local byte_start = vim.fn.byteidx(current_line, col)
-    local byte_end = vim.fn.byteidx(current_line, col + 1)
-
-    local prefix = ''
-    local suffix = ''
-
-    if byte_start > 0 then
-      prefix = current_line:sub(1, byte_start)
-    elseif col > 0 then
-      prefix = string.rep(' ', col)
-    end
-
-    if byte_end > 0 and byte_end < #current_line then
-      suffix = current_line:sub(byte_end + 1)
-    elseif byte_end == 0 and col + 1 < current_display_width then
-      -- byte_end of 0 means col+1 is beyond string, get rest after col
-      local after_col = vim.fn.byteidx(current_line, col + 1)
-      if after_col > 0 then
-        suffix = current_line:sub(after_col + 1)
-      end
-    end
-
-    local new_line = prefix .. char .. suffix
-    vim.api.nvim_buf_set_lines(bufnr, row, row + 1, false, { new_line })
-  end
-end
-
-function M.highlight_node(node_id)
-  local node = nodes.get_by_id(node_id)
-  if not node then return end
-
-  local bufnr = canvas.get_bufnr()
-  local ns = canvas.get_namespace()
-
-  -- Add visual highlight on the node's top-left corner
-  vim.api.nvim_buf_set_extmark(bufnr, ns, node.y - 1, node.x - 1, {
-    virt_text = {{'▶', 'Visual'}},
-    virt_text_pos = 'overlay',
-  })
+  M.render_labels(bufnr, ns, grid)
 end
 
 return M
