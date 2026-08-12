@@ -7,6 +7,8 @@ Built for talking through architecture while screen-sharing: the canvas is a
 plain text buffer, so it renders identically for everyone watching, and the
 Mermaid/PlantUML exports feed straight into downstream tooling.
 
+![The whiteboard canvas with a diagram of a payments architecture](assets/canvas.png)
+
 ## Status
 
 Working and usable, but early. Single board at a time, no undo, no mouse. See
@@ -131,6 +133,8 @@ PlantUML and Mermaid exports.
 `box`, `database`, `cloud`, `server`, `client`, `api`, `service`, `queue`,
 `cache`, `component`, `class`, `function_`, `module`, `package`, `router`,
 `firewall`, `switch`, `load_balancer`
+
+![The shape selector popup open over the canvas](assets/shape-selector.png)
 
 ## Export
 
