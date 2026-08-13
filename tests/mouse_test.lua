@@ -107,4 +107,12 @@ mouse = { line = 3, column = 9999, coladd = 4 }
 canvas.on_click()
 eq(canvas.get_cursor_pos().x <= 120, true, 'click past line end clamps to canvas')
 
+require('whiteboard.config').options.save_directory = vim.fn.tempname()
+canvas.set_cursor(37, 14)
+wb.save('cursor-roundtrip')
+wb.load('cursor-roundtrip')
+local loaded = canvas.get_cursor_pos()
+eq(loaded.x, 37, 'loaded board restores saved cursor x')
+eq(loaded.y, 14, 'loaded board restores saved cursor y')
+
 print('OK mouse_test')

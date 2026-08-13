@@ -305,7 +305,7 @@ function M.load(state)
   end
   M.state.name = state.name or M.state.name
   if type(state.cursor) == 'table' and state.cursor.x and state.cursor.y then
-    M.state.cursor = { x = state.cursor.x, y = state.cursor.y }
+    M.set_cursor(state.cursor.x, state.cursor.y)
   end
 end
 
