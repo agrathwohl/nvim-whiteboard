@@ -71,6 +71,12 @@ function M.complete_connection()
     return false
   end
 
+  if not require('whiteboard.nodes').get_by_id(M.connecting.from_id) then
+    vim.notify('Connection source no longer exists', vim.log.levels.WARN)
+    M.clear_connection_keymaps(require('whiteboard.canvas').get_bufnr())
+    return false
+  end
+
   local pos = require('whiteboard.canvas').get_cursor_pos()
   local node = require('whiteboard.nodes').get_node_at(pos.x, pos.y)
 

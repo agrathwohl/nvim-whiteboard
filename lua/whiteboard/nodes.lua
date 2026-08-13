@@ -206,13 +206,13 @@ function M.edit_node(id)
     local text = (table.concat(lines, '\n'):gsub('^%s+', ''):gsub('%s+$', ''))
     if text ~= node.text then
       require('whiteboard.history').record()
-    end
-    node.text = text
+      node.text = text
 
-    local min_dims = require('whiteboard.shapes').get_dimensions(node.shape)
-    local dims = M.calculate_dimensions(node.text, min_dims)
-    node.width = dims.width
-    node.height = dims.height
+      local min_dims = require('whiteboard.shapes').get_dimensions(node.shape)
+      local dims = M.calculate_dimensions(node.text, min_dims)
+      node.width = dims.width
+      node.height = dims.height
+    end
 
     close()
     require('whiteboard.renderer').render()

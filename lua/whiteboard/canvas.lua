@@ -150,6 +150,8 @@ function M.setup_keymaps()
   map('<LeftDrag>', M.on_drag)
   map('<LeftRelease>', M.on_release)
   map('<2-LeftMouse>', function() nodes().edit_at_cursor() end)
+  map('<3-LeftMouse>', function() end)
+  map('<MiddleMouse>', function() end)
 
   map(km.toggle_grid, M.toggle_grid)
   map(km.save, function() require('whiteboard').save() end)
@@ -187,15 +189,7 @@ function M.move_cursor(dx, dy)
   M.set_cursor(M.state.cursor.x + dx, M.state.cursor.y + dy)
 end
 
--- Re-renders rewrite the buffer under the window cursor, silently changing
--- which cell its byte column lands on; the renderer calls this to pin the
--- cursor back to the cell recorded in state.
-function M.sync_cursor()
-  M.set_cursor(M.state.cursor.x, M.state.cursor.y)
-end
-
-local function mouse_cell()
-  local mp = vim.fn.getmousepos()
+local function mouse_cell(mp)
   if mp.winid ~= M.state.winnr then
     return nil
   end
@@ -206,14 +200,19 @@ local function mouse_cell()
     x = vim.fn.strchars(line)
   end
   return {
-    x = math.min(config.options.canvas.width, x + 1 + (mp.coladd or 0)),
-    y = math.min(config.options.canvas.height, mp.line),
+    x = math.min(config.options.canvas.width, x + 1),
+    y = math.min(config.options.canvas.height, math.max(1, mp.line)),
   }
 end
 
 function M.on_click()
-  local pos = mouse_cell()
+  local mp = vim.fn.getmousepos()
+  local pos = mouse_cell(mp)
   if not pos then
+    if mp.winid ~= 0 and vim.api.nvim_win_is_valid(mp.winid) then
+      vim.api.nvim_set_current_win(mp.winid)
+      pcall(vim.api.nvim_win_set_cursor, mp.winid, { math.max(1, mp.line), math.max(0, mp.column - 1) })
+    end
     return
   end
 
@@ -236,7 +235,7 @@ function M.on_click()
 end
 
 function M.on_drag()
-  local pos = mouse_cell()
+  local pos = mouse_cell(vim.fn.getmousepos())
   local drag = M.state.drag
   if not (pos and drag) then
     return
@@ -260,6 +259,7 @@ function M.on_release()
 end
 
 function M.toggle_grid()
+  require('whiteboard.history').break_run()
   config.options.canvas.show_grid = not config.options.canvas.show_grid
   require('whiteboard.renderer').render()
 end

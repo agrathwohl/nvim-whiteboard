@@ -90,6 +90,7 @@ function M.save(name)
   end
 
   name = name or M.canvas.get_name()
+  require('whiteboard.history').break_run()
 
   local ok, encoded = pcall(vim.json.encode, {
     version = 1,

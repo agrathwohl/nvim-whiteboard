@@ -51,6 +51,11 @@ function M.undo()
   connections.connections = snap.connections
   connections.next_id = snap.connections_next_id
 
+  if connections.connecting then
+    connections.clear_connection_keymaps(require('whiteboard.canvas').get_bufnr())
+    vim.notify('Connection cancelled', vim.log.levels.INFO)
+  end
+
   require('whiteboard.renderer').render()
 end
 

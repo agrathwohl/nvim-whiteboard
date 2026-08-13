@@ -115,6 +115,36 @@ eq(#history.stack, 2, 'moves separated by cursor motion are separate steps')
 history.undo()
 eq(nodes.get_by_id(g).x, 12, 'second gesture undone alone')
 
+canvas.set_cursor(13, 6)
+nodes.resize_at_cursor(20, 6)
+local rw = nodes.get_by_id(g).width
+local rh = nodes.get_by_id(g).height
+local pre_edit_stack = #history.stack
+nodes.edit_at_cursor()
+local popup = vim.api.nvim_get_current_win()
+assert(popup ~= canvas.get_winnr(), 'edit popup opened')
+vim.cmd('stopinsert')
+local keys = vim.api.nvim_replace_termcodes('<CR>', true, false, true)
+vim.api.nvim_feedkeys(keys, 'x', false)
+eq(nodes.get_by_id(g).width, rw, 'no-op text edit preserves manual width')
+eq(nodes.get_by_id(g).height, rh, 'no-op text edit preserves manual height')
+eq(#history.stack, pre_edit_stack, 'no-op text edit records nothing')
+
+nodes.add({ x = 60, y = 20, shape = 'box', text = 'H' })
+require('whiteboard.renderer').render()
+canvas.set_cursor(62, 21)
+connections.start_connection()
+history.undo()
+eq(connections.connecting, nil, 'undo cancels pending connect mode')
+
+canvas.set_cursor(13, 6)
+nodes.move_at_cursor(1, 0)
+local before_toggle = #history.stack
+canvas.toggle_grid()
+canvas.toggle_grid()
+nodes.move_at_cursor(1, 0)
+eq(#history.stack, before_toggle + 1, 'grid toggle separates move gestures')
+
 history.record()
 wb.close()
 eq(#history.stack, 0, 'history cleared on close')

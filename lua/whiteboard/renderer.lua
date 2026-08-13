@@ -214,12 +214,16 @@ function M.render()
 
   local grid = M.build_grid()
 
+  -- Rewriting the lines changes which cell the window cursor's byte column
+  -- lands on. Read the cell (honoring native motions) before, re-pin after.
+  local pos = canvas.get_cursor_pos()
+
   vim.bo[bufnr].modifiable = true
   vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, M.grid_to_lines(grid))
   vim.bo[bufnr].modifiable = false
 
   M.render_labels(bufnr, ns, grid)
-  canvas.sync_cursor()
+  canvas.set_cursor(pos.x, pos.y)
 end
 
 return M
