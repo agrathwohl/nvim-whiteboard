@@ -89,6 +89,7 @@ function M.complete_connection()
     return
   end
 
+  require('whiteboard.history').record()
   M.add(M.connecting.from_id, node.id)
   require('whiteboard.renderer').render()
   vim.notify('Connection created', vim.log.levels.INFO)
@@ -147,6 +148,7 @@ function M.delete_connection_at_cursor()
     return
   end
 
+  require('whiteboard.history').record()
   M.delete(conn.id)
   vim.notify('Connection deleted', vim.log.levels.INFO)
 end
@@ -161,7 +163,8 @@ function M.edit_label_at_cursor()
   end
 
   vim.ui.input({ prompt = 'Connection label: ', default = conn.label or '' }, function(input)
-    if input ~= nil then
+    if input ~= nil and input ~= (conn.label or '') then
+      require('whiteboard.history').record()
       conn.label = input
       require('whiteboard.renderer').render()
     end

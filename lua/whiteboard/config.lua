@@ -99,6 +99,8 @@ M.defaults = {
     start_connect = 'c',
     cancel_connect = '<Esc>',
 
+    undo = 'u',
+
     toggle_grid = 'g',
     save = '<C-s>',
     close = '<C-q>',

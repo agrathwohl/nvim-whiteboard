@@ -53,6 +53,7 @@ function M.add_at_cursor(use_selector)
     if not shape_type then
       return
     end
+    require('whiteboard.history').record()
     local shape_info = config.options.shapes.types[shape_type]
     local id = M.add({
       x = pos.x,
@@ -114,7 +115,10 @@ local function with_node_at_cursor(fn)
 end
 
 function M.delete_at_cursor()
-  with_node_at_cursor(function(node) M.delete(node.id) end)
+  with_node_at_cursor(function(node)
+    require('whiteboard.history').record()
+    M.delete(node.id)
+  end)
 end
 
 function M.edit_at_cursor()
@@ -122,21 +126,31 @@ function M.edit_at_cursor()
 end
 
 function M.move_at_cursor(dx, dy)
-  with_node_at_cursor(function(node) M.move_node(node.id, dx, dy) end)
+  with_node_at_cursor(function(node)
+    require('whiteboard.history').record('move:' .. node.id)
+    M.move_node(node.id, dx, dy)
+  end)
 end
 
 function M.resize_at_cursor(dw, dh)
-  with_node_at_cursor(function(node) M.resize_node(node.id, dw, dh) end)
+  with_node_at_cursor(function(node)
+    require('whiteboard.history').record('resize:' .. node.id)
+    M.resize_node(node.id, dw, dh)
+  end)
 end
 
 function M.duplicate_at_cursor()
-  with_node_at_cursor(function(node) M.duplicate(node.id) end)
+  with_node_at_cursor(function(node)
+    require('whiteboard.history').record()
+    M.duplicate(node.id)
+  end)
 end
 
 function M.edit_label_at_cursor()
   with_node_at_cursor(function(node)
     vim.ui.input({ prompt = 'Node label: ', default = node.label or '' }, function(input)
-      if input ~= nil then
+      if input ~= nil and input ~= (node.label or '') then
+        require('whiteboard.history').record()
         node.label = input
         require('whiteboard.renderer').render()
       end
@@ -189,7 +203,11 @@ function M.edit_node(id)
 
   local function save_and_close()
     local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-    node.text = (table.concat(lines, '\n'):gsub('^%s+', ''):gsub('%s+$', ''))
+    local text = (table.concat(lines, '\n'):gsub('^%s+', ''):gsub('%s+$', ''))
+    if text ~= node.text then
+      require('whiteboard.history').record()
+    end
+    node.text = text
 
     local min_dims = require('whiteboard.shapes').get_dimensions(node.shape)
     local dims = M.calculate_dimensions(node.text, min_dims)

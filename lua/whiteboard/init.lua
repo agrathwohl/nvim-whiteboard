@@ -61,6 +61,7 @@ function M.open(name)
 
   M.nodes.clear()
   M.connections.clear()
+  require('whiteboard.history').clear()
   M.canvas.create(name)
   M.ui.show_toolbar()
   M.ui.show_sidebar()

@@ -50,10 +50,10 @@ function M.show_toolbar()
     string.format(' %s add   %s quick-add   %s edit   %s label   %s connect   %s delete',
       key_hint(km.add_node), key_hint(km.quick_add), key_hint(km.edit_text),
       key_hint(km.edit_label), key_hint(km.start_connect), key_hint(km.delete_node)),
-    string.format(' %s%s%s%s move/resize node   %s grid   %s save   %s close',
+    string.format(' %s%s%s%s move/resize node   %s undo   %s grid   %s save   %s close',
       key_hint(km.node_up_alt), key_hint(km.node_down_alt),
       key_hint(km.resize_wider), key_hint(km.resize_taller),
-      key_hint(km.toggle_grid), key_hint(km.save), key_hint(km.close)),
+      key_hint(km.undo), key_hint(km.toggle_grid), key_hint(km.save), key_hint(km.close)),
   })
   vim.bo[M.buffers.toolbar].modifiable = false
 

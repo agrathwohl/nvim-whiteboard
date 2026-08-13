@@ -11,7 +11,7 @@ Mermaid/PlantUML exports feed straight into downstream tooling.
 
 ## Status
 
-Working and usable, but early. Single board at a time, no undo, no mouse. See
+Working and usable, but early. Single board at a time, no mouse. See
 [Limitations](#limitations).
 
 ## Installation
@@ -119,9 +119,14 @@ In the text editor popup: `<CR>` saves, `<Esc>` (or `<C-c>` in insert) cancels.
 
 | Key     | Action        |
 | ------- | ------------- |
+| `u`     | Undo          |
 | `g`     | Toggle grid   |
 | `<C-s>` | Save          |
 | `<C-q>` | Close         |
+
+Undo keeps the last 100 changes for the current board. A held node move or
+resize undoes as a single step. History is cleared when a board is opened or
+loaded.
 
 ## Shapes
 
@@ -197,7 +202,8 @@ later one silently wins.
 ## Limitations
 
 - One board open at a time.
-- No undo. `<Del>` and `:WhiteboardClose` are immediate.
+- Undo history is per-board and in-memory: `:WhiteboardClose` and opening
+  another board discard it.
 - No mouse support; the canvas is keyboard-only.
 - No node selection or multi-select — every action targets the node under the
   cursor.

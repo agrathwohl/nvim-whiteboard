@@ -144,6 +144,8 @@ function M.setup_keymaps()
     end
   end)
 
+  map(km.undo, function() require('whiteboard.history').undo() end)
+
   map(km.toggle_grid, M.toggle_grid)
   map(km.save, function() require('whiteboard').save() end)
   map(km.close, function() require('whiteboard').close() end)
