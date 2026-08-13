@@ -79,6 +79,7 @@ function M.close()
   M.canvas.close()
   M.nodes.clear()
   M.connections.clear()
+  require('whiteboard.history').clear()
   vim.notify('Whiteboard closed', vim.log.levels.INFO)
 end
 

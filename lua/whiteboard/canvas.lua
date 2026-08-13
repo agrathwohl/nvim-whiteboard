@@ -183,6 +183,7 @@ function M.set_cursor(x, y)
 end
 
 function M.move_cursor(dx, dy)
+  require('whiteboard.history').break_run()
   M.set_cursor(M.state.cursor.x + dx, M.state.cursor.y + dy)
 end
 
