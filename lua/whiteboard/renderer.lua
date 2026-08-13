@@ -219,6 +219,7 @@ function M.render()
   vim.bo[bufnr].modifiable = false
 
   M.render_labels(bufnr, ns, grid)
+  canvas.sync_cursor()
 end
 
 return M

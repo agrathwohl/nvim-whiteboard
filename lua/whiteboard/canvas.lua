@@ -146,20 +146,116 @@ function M.setup_keymaps()
 
   map(km.undo, function() require('whiteboard.history').undo() end)
 
+  map('<LeftMouse>', M.on_click)
+  map('<LeftDrag>', M.on_drag)
+  map('<LeftRelease>', M.on_release)
+  map('<2-LeftMouse>', function() nodes().edit_at_cursor() end)
+
   map(km.toggle_grid, M.toggle_grid)
   map(km.save, function() require('whiteboard').save() end)
   map(km.close, function() require('whiteboard').close() end)
 end
 
-function M.move_cursor(dx, dy)
+-- Canvas coordinates are display cells (one character per cell), but window
+-- cursor columns are byte offsets and grid rows contain multi-byte
+-- box-drawing characters, so every crossing converts via charidx/byteidx.
+local function buf_line(y)
+  if not (M.state.bufnr and vim.api.nvim_buf_is_valid(M.state.bufnr)) then
+    return ''
+  end
+  return vim.api.nvim_buf_get_lines(M.state.bufnr, y - 1, y, false)[1] or ''
+end
+
+function M.set_cursor(x, y)
   if not (M.state.winnr and vim.api.nvim_win_is_valid(M.state.winnr)) then
     return
   end
 
-  M.state.cursor.x = math.max(1, math.min(config.options.canvas.width, M.state.cursor.x + dx))
-  M.state.cursor.y = math.max(1, math.min(config.options.canvas.height, M.state.cursor.y + dy))
+  M.state.cursor.x = math.max(1, math.min(config.options.canvas.width, x))
+  M.state.cursor.y = math.max(1, math.min(config.options.canvas.height, y))
 
-  vim.api.nvim_win_set_cursor(M.state.winnr, { M.state.cursor.y, M.state.cursor.x - 1 })
+  local line = buf_line(M.state.cursor.y)
+  local byte = vim.fn.byteidx(line, M.state.cursor.x - 1)
+  if byte < 0 then
+    byte = #line
+  end
+  vim.api.nvim_win_set_cursor(M.state.winnr, { M.state.cursor.y, byte })
+end
+
+function M.move_cursor(dx, dy)
+  M.set_cursor(M.state.cursor.x + dx, M.state.cursor.y + dy)
+end
+
+-- Re-renders rewrite the buffer under the window cursor, silently changing
+-- which cell its byte column lands on; the renderer calls this to pin the
+-- cursor back to the cell recorded in state.
+function M.sync_cursor()
+  M.set_cursor(M.state.cursor.x, M.state.cursor.y)
+end
+
+local function mouse_cell()
+  local mp = vim.fn.getmousepos()
+  if mp.winid ~= M.state.winnr then
+    return nil
+  end
+
+  local line = buf_line(mp.line)
+  local x = vim.fn.charidx(line, math.max(0, mp.column - 1))
+  if x < 0 then
+    x = vim.fn.strchars(line)
+  end
+  return {
+    x = math.min(config.options.canvas.width, x + 1 + (mp.coladd or 0)),
+    y = math.min(config.options.canvas.height, mp.line),
+  }
+end
+
+function M.on_click()
+  local pos = mouse_cell()
+  if not pos then
+    return
+  end
+
+  M.set_cursor(pos.x, pos.y)
+  M.state.drag = nil
+
+  local connections = require('whiteboard.connections')
+  local node = require('whiteboard.nodes').get_node_at(pos.x, pos.y)
+
+  if connections.connecting then
+    if node and connections.complete_connection() then
+      connections.clear_connection_keymaps(M.state.bufnr)
+    end
+    return
+  end
+
+  if node then
+    M.state.drag = { id = node.id, dx = pos.x - node.x, dy = pos.y - node.y }
+  end
+end
+
+function M.on_drag()
+  local pos = mouse_cell()
+  local drag = M.state.drag
+  if not (pos and drag) then
+    return
+  end
+
+  local nodes = require('whiteboard.nodes')
+  local node = nodes.get_by_id(drag.id)
+  if not node then
+    M.state.drag = nil
+    return
+  end
+
+  require('whiteboard.history').record('drag:' .. drag.id)
+  nodes.move_node(drag.id, (pos.x - drag.dx) - node.x, (pos.y - drag.dy) - node.y)
+  M.set_cursor(pos.x, pos.y)
+end
+
+function M.on_release()
+  M.state.drag = nil
+  require('whiteboard.history').break_run()
 end
 
 function M.toggle_grid()
@@ -170,8 +266,11 @@ end
 function M.get_cursor_pos()
   if M.state.winnr and vim.api.nvim_win_is_valid(M.state.winnr) then
     local cursor = vim.api.nvim_win_get_cursor(M.state.winnr)
+    local x = vim.fn.charidx(buf_line(cursor[1]), cursor[2])
     M.state.cursor.y = cursor[1]
-    M.state.cursor.x = cursor[2] + 1
+    if x >= 0 then
+      M.state.cursor.x = x + 1
+    end
   end
   return { x = M.state.cursor.x, y = M.state.cursor.y }
 end

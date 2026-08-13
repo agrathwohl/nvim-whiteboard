@@ -11,7 +11,7 @@ Mermaid/PlantUML exports feed straight into downstream tooling.
 
 ## Status
 
-Working and usable, but early. Single board at a time, no mouse. See
+Working and usable, but early. Single board at a time. See
 [Limitations](#limitations).
 
 ## Installation
@@ -128,6 +128,18 @@ Undo keeps the last 100 changes for the current board. A held node move or
 resize undoes as a single step. History is cleared when a board is opened or
 loaded.
 
+### Mouse
+
+Works whenever Neovim's `mouse` option includes normal mode (the default,
+`mouse=nvi`).
+
+| Mouse            | Action                                                  |
+| ---------------- | ------------------------------------------------------- |
+| Click            | Move the cursor; on a node, ready it for dragging       |
+| Drag             | Move the node under the pointer (one undo step)         |
+| Double-click     | Edit the node's text                                    |
+| Click (connecting) | Complete the pending connection on the clicked node   |
+
 ## Shapes
 
 Eighteen shape types are selectable. Three have distinct renderings —
@@ -204,9 +216,8 @@ later one silently wins.
 - One board open at a time.
 - Undo history is per-board and in-memory: `:WhiteboardClose` and opening
   another board discard it.
-- No mouse support; the canvas is keyboard-only.
 - No node selection or multi-select — every action targets the node under the
-  cursor.
+  cursor (or pointer).
 - Connections route as a single orthogonal dogleg and do not avoid other nodes.
 - Nodes may overlap; the higher-numbered node draws on top and takes the hit.
 - `.wb` save files are JSON with a `version` field, but there is no migration

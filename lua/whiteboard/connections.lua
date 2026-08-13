@@ -68,7 +68,7 @@ end
 
 function M.complete_connection()
   if not M.connecting then
-    return
+    return false
   end
 
   local pos = require('whiteboard.canvas').get_cursor_pos()
@@ -76,23 +76,24 @@ function M.complete_connection()
 
   if not node then
     vim.notify('No node at cursor position', vim.log.levels.WARN)
-    return
+    return false
   end
 
   if node.id == M.connecting.from_id then
     vim.notify('Cannot connect a node to itself', vim.log.levels.WARN)
-    return
+    return false
   end
 
   if M.exists(M.connecting.from_id, node.id) then
     vim.notify('Connection already exists', vim.log.levels.WARN)
-    return
+    return false
   end
 
   require('whiteboard.history').record()
   M.add(M.connecting.from_id, node.id)
   require('whiteboard.renderer').render()
   vim.notify('Connection created', vim.log.levels.INFO)
+  return true
 end
 
 function M.cancel_connection()
